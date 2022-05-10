@@ -29,7 +29,7 @@ MAX_THREADS = 32
 DEFAULT_THREADS=5
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description = 'Download your collection from bandcamp. Requires a logged in session in a supported browser so that the browser cookies can be used to authenticate with bandcamp. Albums are saved into directories named after their artist, and already existing albums will not be re-downloaded.')
+    parser = argparse.ArgumentParser(description = 'Download your collection from bandcamp. Requires a logged in session in a supported browser so that the browser cookies can be used to authenticate with bandcamp. Albums are saved into directories named after their artist. Already existing albums will have their file size compared to what is expected and re-downloaded if the sizes differ. Otherwise already existing albums will not be re-downloaded.')
     parser.add_argument('username', type=str, help='Your bandcamp username')
     parser.add_argument(
         '--browser', '-b',
@@ -68,8 +68,12 @@ def main() -> int:
 
     print('Starting album downloads...')
     CONFIG['TQDM'] = tqdm(links, unit = 'album')
-    with ThreadPoolExecutor(max_workers = args.parallel_downloads) as executor:
-        executor.map(download_album, links)
+    if args.parallel_downloads > 1:
+        with ThreadPoolExecutor(max_workers = args.parallel_downloads) as executor:
+            executor.map(download_album, links)
+    else:
+        for link in links:
+            download_album(link)
     CONFIG['TQDM'].close()
     print('Done.')
 
@@ -151,9 +155,14 @@ def download_file(_url, _to = None):
         file_path = os.path.join(CONFIG['OUTPUT_DIR'], _to, filename)
 
         if os.path.exists(file_path):
-            if CONFIG['VERBOSE'] >= 3: CONFIG['TQDM'].write('Skipping album that already exists: [{}]'.format(file_path))
-            CONFIG['TQDM'].update()
-            return
+            expected_size = int(response.headers['content-length'])
+            actual_size = os.stat(file_path).st_size
+            if expected_size == actual_size:
+                if CONFIG['VERBOSE'] >= 3: CONFIG['TQDM'].write('Skipping album that already exists: [{}]'.format(file_path))
+                CONFIG['TQDM'].update()
+                return
+            else:
+                if CONFIG['VERBOSE'] >= 2: CONFIG['TQDM'].write('Album at [{}] is the wrong size. Expected [{}] but was [{}]. Re-downloading.'.format(file_path, expected_size, actual_size))
 
         if CONFIG['VERBOSE'] >= 2: CONFIG['TQDM'].write('Album being saved to [{}]'.format(file_path))
         os.makedirs(os.path.dirname(file_path), exist_ok=True)
