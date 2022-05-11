@@ -23,10 +23,29 @@ CONFIG = {
     'VERBOSE' : False,
     'OUTPUT_DIR' : None,
     'BROWSER' : None,
+    'FORMAT' : None,
     'TQDM' : None,
 }
 MAX_THREADS = 32
-DEFAULT_THREADS=5
+DEFAULT_THREADS = 5
+SUPPORTED_FILE_FORMATS = [
+    'aac-hi',
+    'aiff-lossless',
+    'alac',
+    'flac',
+    'mp3-320',
+    'mp3-v0',
+    'vorbis',
+    'wav',
+]
+SUPPORTED_BROWSERS = [
+    'firefox',
+    'chrome',
+    'chromium',
+    'brave',
+    'opera',
+    'edge'
+]
 
 def main() -> int:
     parser = argparse.ArgumentParser(description = 'Download your collection from bandcamp. Requires a logged in session in a supported browser so that the browser cookies can be used to authenticate with bandcamp. Albums are saved into directories named after their artist. Already existing albums will have their file size compared to what is expected and re-downloaded if the sizes differ. Otherwise already existing albums will not be re-downloaded.')
@@ -34,14 +53,20 @@ def main() -> int:
     parser.add_argument(
         '--browser', '-b',
         type=str,
-        default='firefox',
-        choices=['firefox', 'chrome', 'chromium', 'brave', 'opera', 'edge'],
+        default = 'firefox',
+        choices = SUPPORTED_BROWSERS,
         help='The browser whose cookies to use for accessing bandcamp. Defaults to "firefox"'
     )
     parser.add_argument(
         '--directory', '-d',
         default = os.getcwd(),
         help='The directory to download albums to. Defaults to the current directory.'
+    )
+    parser.add_argument(
+        '--format', '-f',
+        default = 'mp3-320',
+        choices = SUPPORTED_FILE_FORMATS,
+        help = 'What format do download the songs in. Default is \'mp3-320\'.'
     )
     parser.add_argument(
         '--parallel-downloads', '-p',
@@ -58,6 +83,7 @@ def main() -> int:
     CONFIG['VERBOSE'] = args.verbose
     CONFIG['OUTPUT_DIR'] = args.directory
     CONFIG['BROWSER'] = args.browser
+    CONFIG['FORMAT'] = args.format
 
     if CONFIG['VERBOSE']: print(args)
     links = get_download_links_for_user(args.username)
@@ -100,10 +126,10 @@ def get_download_links_for_user(_user : str) -> [str]:
     soup = BeautifulSoup(
         requests.get(
             USER_URL.format(_user),
-            cookies=get_cookies()
+            cookies = get_cookies()
         ).text,
         'html.parser',
-        parse_only=SoupStrainer('div', id='pagedata'),
+        parse_only = SoupStrainer('div', id='pagedata'),
     )
     div = soup.find('div')
     if not div:
@@ -125,10 +151,10 @@ def download_album(_album_url):
     soup = BeautifulSoup(
         requests.get(
             _album_url,
-            cookies=get_cookies()
+            cookies = get_cookies()
         ).text,
         'html.parser',
-        parse_only=SoupStrainer('div', id='pagedata'),
+        parse_only = SoupStrainer('div', id='pagedata'),
     )
     div = soup.find('div')
     if not div:
@@ -137,16 +163,22 @@ def download_album(_album_url):
         return
 
     data = json.loads(html.unescape(div.get('data-blob')))
-    download_url = data['download_items'][0]['downloads']['mp3-320']['url']
     artist = data['download_items'][0]['artist']
-    # album = data['download_items'][0]['title']
+    album = data['download_items'][0]['title']
+
+    if not CONFIG['FORMAT'] in data['download_items'][0]['downloads']:
+        CONFIG['TQDM'].write('WARN: Album [{}] at url [{}] does not have a download for format [{}].'.format(album, _album_url, CONFIG['FORMAT']))
+        CONFIG['TQDM'].update()
+        return
+
+    download_url = data['download_items'][0]['downloads'][CONFIG['FORMAT']]['url']
     download_file(download_url, artist)
 
 def download_file(_url, _to = None):
     with requests.get(
             _url,
-            cookies=get_cookies(),
-            stream=True,
+            cookies = get_cookies(),
+            stream = True,
     ) as response:
         response.raise_for_status()
 
