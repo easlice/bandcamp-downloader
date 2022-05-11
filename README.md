@@ -3,11 +3,11 @@ Download your Bandcamp collection using this python script.
 
 It requires you to have a browser with a logged in session of bandcamp open. Cookies from the browser will be used to authenticate with Bandcamp.
 
-Supported browsers are the same as in browser_cookie3: Chrome, Chromium, Firefox, Brave, Opera, and Edge
+Supported browsers are the same as in [browser_cookie3](https://github.com/borisbabic/browser_cookie3): Chrome, Chromium, Firefox, Brave, Opera, and Edge
 
 Albums will be downloaded into their zip files and singles will just be plain files. Downloads are organized by Artist name. Downloads will happen in parallel, by default using a pool of 5 threads. Already existing files of the same name will have their file sizes checked against what it should be, and if they are the same, the download will be skipped, otherwise it will be over-written.
 
-Be default, files are downloaded in mp3-320 format, but that can be changed with the `--format`/`-f` flag.
+By default, files are downloaded in mp3-320 format, but that can be changed with the `--format`/`-f` flag.
 
 ## Requirements
 - Python3
