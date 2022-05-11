@@ -205,17 +205,17 @@ def download_file(_url, _to = None):
 
 def get_cookies():
     if CONFIG['BROWSER'] == 'firefox':
-        return browser_cookie3.firefox()
+        return browser_cookie3.firefox(domain_name = 'bandcamp.com')
     elif CONFIG['BROWSER'] == 'chrome':
-        return browser_cookie3.chrome()
+        return browser_cookie3.chrome(domain_name = 'bandcamp.com')
     elif CONFIG['BROWSER'] == 'brave':
-        return browser_cookie3.brave()
+        return browser_cookie3.brave(domain_name = 'bandcamp.com')
     elif CONFIG['BROWSER'] == 'edge':
-        return browser_cookie3.edge()
+        return browser_cookie3.edge(domain_name = 'bandcamp.com')
     elif CONFIG['BROWSER'] == 'chromium':
-        return browser_cookie3.chromium()
+        return browser_cookie3.chromium(domain_name = 'bandcamp.com')
     elif CONFIG['BROWSER'] == 'opera':
-        return browser_cookie3.opera()
+        return browser_cookie3.opera(domain_name = 'bandcamp.com')
     else:
         raise Exception('Browser type if [{}] is unknown. Can\'t pull cookies, so can\'t authenticate with bandcamp.'.format(CONFIG['BROWSER']))
 
