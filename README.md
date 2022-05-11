@@ -30,6 +30,20 @@ or directly through `poetry run`:
 poetry run python bandcamp-downloader.py [arguments]
 ```
 
+### Running outside of poetry
+
+You can also run the program directly on your machine, outside of Poetry's virtual environment. Install the packages:
+
+```
+pip install -r requirements.txt
+```
+
+Run the program:
+
+```
+./bandcamp-downloader.py [arguments]
+```
+
 ## Usage
 ```
 usage: bandcamp-downloader.py [-h]
@@ -69,6 +83,14 @@ optional arguments:
                         already exist.
   --verbose, -v
 ```
+
+## Development and Contributing
+
+When modifiying required packages, please:
+
+* Add to Poetry (`poetry add`)
+* Then update the `requirements.txt` (`poetry run pip freeze > requirements.txt`)
+* Commit all updated files
 
 ## Notes
 
