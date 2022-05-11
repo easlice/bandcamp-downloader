@@ -9,6 +9,20 @@ Albums will be downloaded into their zip files and singles will just be plain fi
 
 By default, files are downloaded in mp3-320 format, but that can be changed with the `--format`/`-f` flag.
 
+## Known Issues
+
+### Failure to read cookies on Windows for Chrome/Chromium/Brave
+
+This is a known issue with the [browser-cookie3](https://github.com/borisbabic/browser_cookie3) module. I've submitted a PR to fix it [here](https://github.com/borisbabic/browser_cookie3/pull/122). In the meantime, firefox should still work fine, and I have created a branch [here](https://github.com/easlice/bandcamp-downloader/tree/with-local-browser-cookies3-patch) with a patched browser_cookie3 module that should work.
+
+### Running the script on WSL crashes with a `DBUS_SESSION_BUS_ADDRESS` error
+
+This is seems to be a WSL issue. The browser_cookie3 module  tries to get a secret from your keyring via dbus, but WSL may not have dbus installed, or may not have it set up as expected. As such, you may see the following error:
+
+`secretstorage.exceptions.SecretServiceNotAvailableException: Environment variable DBUS_SESSION_BUS_ADDRESS is unset`
+
+Please either check your WSL dbus installation/configuration, or run the script nativity on windows.
+
 ## Requirements
 - Python3
 - [BeautifulSoup 4](https://www.crummy.com/software/BeautifulSoup/bs4/doc/) `pip install bs4`
