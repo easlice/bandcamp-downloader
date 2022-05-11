@@ -23,7 +23,21 @@ This is seems to be a WSL issue. The browser_cookie3 module  tries to get a secr
 
 Please either check your WSL dbus installation/configuration, or run the script nativity on windows.
 
-## Getting started
+## Manual Setup
+
+Install the script dependencies by running:
+
+```
+pip install -r requirements.txt
+```
+
+Run the program:
+
+```
+./bandcamp-downloader.py [arguments]
+```
+
+## Setup via Poetry
 
 Install requirements using [Python Poetry](https://python-poetry.org/). [Installation instructions here](https://python-poetry.org/docs/#installation).
 
@@ -42,20 +56,6 @@ or directly through `poetry run`:
 
 ```
 poetry run python bandcamp-downloader.py [arguments]
-```
-
-### Running outside of poetry
-
-You can also run the program directly on your machine, outside of Poetry's virtual environment. Install the packages:
-
-```
-pip install -r requirements.txt
-```
-
-Run the program:
-
-```
-./bandcamp-downloader.py [arguments]
 ```
 
 ## Usage
@@ -113,6 +113,3 @@ If things are not working correctly, but are also not spitting out errors, try s
 If you have a logged in session in the browser, have used the `--browser`/`-b` flag correctly, and still are being told that the script isn't finding any albums, check out the page for [browser_cookie3](https://github.com/borisbabic/browser_cookie3), you might need to do some configuring in your browser to make the cookies available to the script.
 
 If you are downloading your collection in multiple formats, the script can't tell if an already downloaded zip file is the same format or not, and will happily overwrite it. So make sure to use different directories for different formats, either by running the script somewhere else or by supplying directories to the `--directory`/`-d` flag.
-
-## TODO
-- Allow filtering by artist?
