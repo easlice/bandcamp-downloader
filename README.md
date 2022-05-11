@@ -23,12 +23,40 @@ This is seems to be a WSL issue. The browser_cookie3 module  tries to get a secr
 
 Please either check your WSL dbus installation/configuration, or run the script nativity on windows.
 
-## Requirements
-- Python3
-- [BeautifulSoup 4](https://www.crummy.com/software/BeautifulSoup/bs4/doc/) `pip install bs4`
-- [requests](https://github.com/psf/requests) `pip install requests`
-- [browser_cookie3](https://github.com/borisbabic/browser_cookie3) `pip install browser-cookie3`
-- [TQDM](https://tqdm.github.io/) `pip install tqdm`
+## Getting started
+
+Install requirements using [Python Poetry](https://python-poetry.org/). [Installation instructions here](https://python-poetry.org/docs/#installation).
+
+```
+poetry install
+```
+
+Run the script within the poetry shell:
+
+```
+poetry shell
+python bandcamp-downloader.py [arguments]
+```
+
+or directly through `poetry run`:
+
+```
+poetry run python bandcamp-downloader.py [arguments]
+```
+
+### Running outside of poetry
+
+You can also run the program directly on your machine, outside of Poetry's virtual environment. Install the packages:
+
+```
+pip install -r requirements.txt
+```
+
+Run the program:
+
+```
+./bandcamp-downloader.py [arguments]
+```
 
 ## Usage
 ```
@@ -69,6 +97,14 @@ optional arguments:
                         already exist.
   --verbose, -v
 ```
+
+## Development and Contributing
+
+When modifiying required packages, please:
+
+* Add to Poetry (`poetry add`)
+* Then update the `requirements.txt` (`poetry run pip freeze > requirements.txt`)
+* Commit all updated files
 
 ## Notes
 
