@@ -11,7 +11,7 @@ By default, files are downloaded in mp3-320 format, but that can be changed with
 
 ## Getting started
 
-Install requirements using [Python Poetry](https://python-poetry.org/). [Installation instructions here](https://python-poetry.org/docs/).
+Install requirements using [Python Poetry](https://python-poetry.org/). [Installation instructions here](https://python-poetry.org/docs/#installation).
 
 ```
 poetry install
