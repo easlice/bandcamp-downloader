@@ -23,7 +23,7 @@ usage: bandcamp-downloader.py [-h]
                               [--directory DIRECTORY]
                               [--format {aac-hi,aiff-lossless,alac,flac,mp3-320,mp3-v0,vorbis,wav}]
                               [--parallel-downloads PARALLEL_DOWNLOADS]
-                              [--verbose]
+                              [--force] [--verbose]
                               username
 
 Download your collection from bandcamp. Requires a logged in session in a
@@ -51,6 +51,8 @@ optional arguments:
                         How many threads to use for parallel downloads. Set to
                         '1' to disable parallelism. Default is 5. Must be
                         between 1 and 32
+  --force               Always re-download existing albums, even if they
+                        already exist.
   --verbose, -v
 ```
 

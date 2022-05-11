@@ -24,6 +24,7 @@ CONFIG = {
     'OUTPUT_DIR' : None,
     'BROWSER' : None,
     'FORMAT' : None,
+    'FORCE' : False,
     'TQDM' : None,
 }
 MAX_THREADS = 32
@@ -74,6 +75,12 @@ def main() -> int:
         default = DEFAULT_THREADS,
         help = 'How many threads to use for parallel downloads. Set to \'1\' to disable parallelism. Default is 5. Must be between 1 and {}'.format(MAX_THREADS),
     )
+    parser.add_argument(
+        '--force',
+        action = 'store_true',
+        default = False,
+        help = 'Always re-download existing albums, even if they already exist.',
+    )
     parser.add_argument('--verbose', '-v', action='count', default = 0)
     args = parser.parse_args()
 
@@ -84,8 +91,10 @@ def main() -> int:
     CONFIG['OUTPUT_DIR'] = args.directory
     CONFIG['BROWSER'] = args.browser
     CONFIG['FORMAT'] = args.format
+    CONFIG['FORCE'] = args.force
 
     if CONFIG['VERBOSE']: print(args)
+    if CONFIG['FORCE']: print('WARNING: --force flag set, existing files will be overwritten.')
     links = get_download_links_for_user(args.username)
     if CONFIG['VERBOSE']: print('Found [{}] links for [{}]\'s collection.'.format(len(links), args.username))
     if not links:
@@ -187,14 +196,17 @@ def download_file(_url, _to = None):
         file_path = os.path.join(CONFIG['OUTPUT_DIR'], _to, filename)
 
         if os.path.exists(file_path):
-            expected_size = int(response.headers['content-length'])
-            actual_size = os.stat(file_path).st_size
-            if expected_size == actual_size:
-                if CONFIG['VERBOSE'] >= 3: CONFIG['TQDM'].write('Skipping album that already exists: [{}]'.format(file_path))
-                CONFIG['TQDM'].update()
-                return
+            if CONFIG['FORCE']:
+                if CONFIG['VERBOSE']: CONFIG['TQDM'].write('--force flag was given. Overwriting existing file at [{}].'.format(file_path))
             else:
-                if CONFIG['VERBOSE'] >= 2: CONFIG['TQDM'].write('Album at [{}] is the wrong size. Expected [{}] but was [{}]. Re-downloading.'.format(file_path, expected_size, actual_size))
+                expected_size = int(response.headers['content-length'])
+                actual_size = os.stat(file_path).st_size
+                if expected_size == actual_size:
+                    if CONFIG['VERBOSE'] >= 3: CONFIG['TQDM'].write('Skipping album that already exists: [{}]'.format(file_path))
+                    CONFIG['TQDM'].update()
+                    return
+                else:
+                    if CONFIG['VERBOSE'] >= 2: CONFIG['TQDM'].write('Album at [{}] is the wrong size. Expected [{}] but was [{}]. Re-downloading.'.format(file_path, expected_size, actual_size))
 
         if CONFIG['VERBOSE'] >= 2: CONFIG['TQDM'].write('Album being saved to [{}]'.format(file_path))
         os.makedirs(os.path.dirname(file_path), exist_ok=True)
