@@ -9,12 +9,26 @@ Albums will be downloaded into their zip files and singles will just be plain fi
 
 By default, files are downloaded in mp3-320 format, but that can be changed with the `--format`/`-f` flag.
 
-## Requirements
-- Python3
-- [BeautifulSoup 4](https://www.crummy.com/software/BeautifulSoup/bs4/doc/) `pip install bs4`
-- [requests](https://github.com/psf/requests) `pip install requests`
-- [browser_cookie3](https://github.com/borisbabic/browser_cookie3) `pip install browser-cookie3`
-- [TQDM](https://tqdm.github.io/) `pip install tqdm`
+## Getting started
+
+Install requirements using [Python Poetry](https://python-poetry.org/). [Installation instructions here](https://python-poetry.org/docs/).
+
+```
+poetry install
+```
+
+Run the script within the poetry shell:
+
+```
+poetry shell
+python bandcamp-downloader.py [arguments]
+```
+
+or directly through `poetry run`:
+
+```
+poetry run python bandcamp-downloader.py [arguments]
+```
 
 ## Usage
 ```
