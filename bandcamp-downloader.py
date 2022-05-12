@@ -5,14 +5,16 @@ import html
 import json
 import os
 import re
-import requests
 import sys
+import time
 import urllib.parse
 
 from concurrent.futures import ThreadPoolExecutor
 
 # These require pip installs
 from bs4 import BeautifulSoup, SoupStrainer
+import requests
+from requests import HTTPError
 import browser_cookie3
 from tqdm import tqdm
 
@@ -28,6 +30,9 @@ CONFIG = {
     'FORMAT' : None,
     'FORCE' : False,
     'TQDM' : None,
+    'MAX_URL_ATTEMPTS' : 5,
+    'URL_RETRY_WAIT' : 5,
+    'POST_DOWNLOAD_SLEEP' : 1,
 }
 MAX_THREADS = 32
 DEFAULT_THREADS = 5
@@ -158,67 +163,95 @@ def get_download_links_for_user(_user : str) -> [str]:
     get_user_collection(user_info)
     return user_info['download_urls']
 
-def download_album(_album_url : str) -> None:
-    soup = BeautifulSoup(
-        requests.get(
-            _album_url,
-            cookies = get_cookies()
-        ).text,
-        'html.parser',
-        parse_only = SoupStrainer('div', id='pagedata'),
-    )
-    div = soup.find('div')
-    if not div:
-        CONFIG['TQDM'].write('ERROR: No div with pagedata found for album at url [{}]'.format(_album_url))
-        CONFIG['TQDM'].update()
-        return
+def download_album(_album_url : str, _attempt : int = 1) -> None:
+    try:
+        soup = BeautifulSoup(
+            requests.get(
+                _album_url,
+                cookies = get_cookies()
+            ).text,
+            'html.parser',
+            parse_only = SoupStrainer('div', id='pagedata'),
+        )
+        div = soup.find('div')
+        if not div:
+            CONFIG['TQDM'].write('ERROR: No div with pagedata found for album at url [{}]'.format(_album_url))
+            return
 
-    data = json.loads(html.unescape(div.get('data-blob')))
-    artist = data['download_items'][0]['artist']
-    album = data['download_items'][0]['title']
+        data = json.loads(html.unescape(div.get('data-blob')))
+        artist = data['download_items'][0]['artist']
+        album = data['download_items'][0]['title']
 
-    if not CONFIG['FORMAT'] in data['download_items'][0]['downloads']:
-        CONFIG['TQDM'].write('WARN: Album [{}] at url [{}] does not have a download for format [{}].'.format(album, _album_url, CONFIG['FORMAT']))
-        CONFIG['TQDM'].update()
-        return
+        if not CONFIG['FORMAT'] in data['download_items'][0]['downloads']:
+            CONFIG['TQDM'].write('WARN: Album [{}] at url [{}] does not have a download for format [{}].'.format(album, _album_url, CONFIG['FORMAT']))
+            return
 
-    download_url = data['download_items'][0]['downloads'][CONFIG['FORMAT']]['url']
-    download_file(download_url, artist)
+        download_url = data['download_items'][0]['downloads'][CONFIG['FORMAT']]['url']
+        download_file(download_url, artist)
+    except HTTPException as e:
+        if _attempt <= CONFIG['MAX_URL_ATTEMPTS']:
+            if CONFIG['VERBOSE'] >=2: CONFIG['TQDM'].write('WARN: HTTP Error on attempt # [{}] to download the album at [{}]. Trying again...'.format(_attempt, _album_url))
+            time.sleep(CONFIG['URL_RETRY_WAIT'])
+            download_album(_album_url, _attempt + 1)
+        else:
+            print_exception(e, 'An exception occurred trying to download album url [{}]:'.format(_album_url))
+    except Exception as e:
+        print_exception(e, 'An exception occurred trying to download album url [{}]:'.format(_album_url))
+    finally:
+        # only tell TQDM we're done on the first call
+        if _attempt == 1:
+            CONFIG['TQDM'].update()
+            time.sleep(CONFIG['POST_DOWNLOAD_SLEEP'])
 
-def download_file(_url : str, _to: str = None) -> None:
-    with requests.get(
-            _url,
-            cookies = get_cookies(),
-            stream = True,
-    ) as response:
-        response.raise_for_status()
+def download_file(_url : str, _to: str = None, _attempt : int = 1) -> None:
+    try:
+        with requests.get(
+                _url,
+                cookies = get_cookies(),
+                stream = True,
+        ) as response:
+            response.raise_for_status()
 
-        filename_match = FILENAME_REGEX.search(response.headers['content-disposition'])
-        filename = urllib.parse.unquote(filename_match.group(1)) if filename_match else _url.split('/')[-1]
-        file_path = os.path.join(CONFIG['OUTPUT_DIR'], _to, filename)
+            filename_match = FILENAME_REGEX.search(response.headers['content-disposition'])
+            filename = urllib.parse.unquote(filename_match.group(1)) if filename_match else _url.split('/')[-1]
+            file_path = os.path.join(CONFIG['OUTPUT_DIR'], _to, filename)
 
-        # Remove not allowed path characters
-        file_path = sanitize_path(file_path)
+            # Remove not allowed path characters
+            file_path = sanitize_path(file_path)
 
-        if os.path.exists(file_path):
-            if CONFIG['FORCE']:
-                if CONFIG['VERBOSE']: CONFIG['TQDM'].write('--force flag was given. Overwriting existing file at [{}].'.format(file_path))
-            else:
-                expected_size = int(response.headers['content-length'])
-                actual_size = os.stat(file_path).st_size
-                if expected_size == actual_size:
-                    if CONFIG['VERBOSE'] >= 3: CONFIG['TQDM'].write('Skipping album that already exists: [{}]'.format(file_path))
-                    CONFIG['TQDM'].update()
-                    return
+            if os.path.exists(file_path):
+                if CONFIG['FORCE']:
+                    if CONFIG['VERBOSE']: CONFIG['TQDM'].write('--force flag was given. Overwriting existing file at [{}].'.format(file_path))
                 else:
-                    if CONFIG['VERBOSE'] >= 2: CONFIG['TQDM'].write('Album at [{}] is the wrong size. Expected [{}] but was [{}]. Re-downloading.'.format(file_path, expected_size, actual_size))
+                    expected_size = int(response.headers['content-length'])
+                    actual_size = os.stat(file_path).st_size
+                    if expected_size == actual_size:
+                        if CONFIG['VERBOSE'] >= 3: CONFIG['TQDM'].write('Skipping album that already exists: [{}]'.format(file_path))
+                        return
+                    else:
+                        if CONFIG['VERBOSE'] >= 2: CONFIG['TQDM'].write('Album at [{}] is the wrong size. Expected [{}] but was [{}]. Re-downloading.'.format(file_path, expected_size, actual_size))
 
-        if CONFIG['VERBOSE'] >= 2: CONFIG['TQDM'].write('Album being saved to [{}]'.format(file_path))
-        os.makedirs(os.path.dirname(file_path), exist_ok=True)
-        with open(file_path, 'wb') as fh:
-            for chunk in response.iter_content(chunk_size=8192):
-                fh.write(chunk)
-        CONFIG['TQDM'].update()
+            if CONFIG['VERBOSE'] >= 2: CONFIG['TQDM'].write('Album being saved to [{}]'.format(file_path))
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            with open(file_path, 'wb') as fh:
+                for chunk in response.iter_content(chunk_size=8192):
+                    fh.write(chunk)
+    except HTTPError as e:
+        if _attempt <= CONFIG['MAX_URL_ATTEMPTS']:
+            if CONFIG['VERBOSE'] >=2: CONFIG['TQDM'].write('WARN: HTTP Error on attempt # [{}] to download the file at [{}]. Trying again...'.format(_attempt, _url))
+            time.sleep(CONFIG['URL_RETRY_WAIT'])
+            download_file(_url, _to, _attempt + 1)
+        else:
+            print_exception(e, 'An exception occurred trying to download file url [{}]:'.format(_url))
+    except Exception as e:
+        print_exception(e, 'An exception occurred trying to download file url [{}]:'.format(_url))
+
+def print_exception(_e : Exception, _msg : str = '') -> None:
+    CONFIG['TQDM'].write('\nERROR: {}'.format(_msg))
+    CONFIG['TQDM'].write(str(_e))
+    CONFIG['TQDM'].write(str(sys.exc_info()))
+    CONFIG['TQDM'].write('\n')
+
 
 # Windows has some picky requirements about file names
 # So let's replace known bad characters with '-'
