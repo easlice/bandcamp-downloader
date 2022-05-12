@@ -19,6 +19,8 @@ from tqdm import tqdm
 USER_URL = 'https://bandcamp.com/{}'
 COLLECTION_POST_URL = 'https://bandcamp.com/api/fancollection/1/collection_items'
 FILENAME_REGEX = re.compile('filename\\*=UTF-8\'\'(.*)')
+WINDOWS_DRIVE_REGEX = re.compile(r'[a-zA-Z]:\\')
+SANATIZE_PATH_WINDOWS_REGEX = re.compile(r'[<>:"/|?*]')
 CONFIG = {
     'VERBOSE' : False,
     'OUTPUT_DIR' : None,
@@ -88,7 +90,7 @@ def main() -> int:
         parser.error('--parallel-downloads must be between 1 and 32.')
 
     CONFIG['VERBOSE'] = args.verbose
-    CONFIG['OUTPUT_DIR'] = args.directory
+    CONFIG['OUTPUT_DIR'] = os.path.normcase(args.directory)
     CONFIG['BROWSER'] = args.browser
     CONFIG['FORMAT'] = args.format
     CONFIG['FORCE'] = args.force
@@ -156,7 +158,7 @@ def get_download_links_for_user(_user : str) -> [str]:
     get_user_collection(user_info)
     return user_info['download_urls']
 
-def download_album(_album_url):
+def download_album(_album_url : str) -> None:
     soup = BeautifulSoup(
         requests.get(
             _album_url,
@@ -183,7 +185,7 @@ def download_album(_album_url):
     download_url = data['download_items'][0]['downloads'][CONFIG['FORMAT']]['url']
     download_file(download_url, artist)
 
-def download_file(_url, _to = None):
+def download_file(_url : str, _to: str = None) -> None:
     with requests.get(
             _url,
             cookies = get_cookies(),
@@ -194,6 +196,9 @@ def download_file(_url, _to = None):
         filename_match = FILENAME_REGEX.search(response.headers['content-disposition'])
         filename = urllib.parse.unquote(filename_match.group(1)) if filename_match else _url.split('/')[-1]
         file_path = os.path.join(CONFIG['OUTPUT_DIR'], _to, filename)
+
+        # Remove not allowed path characters
+        file_path = sanitize_path(file_path)
 
         if os.path.exists(file_path):
             if CONFIG['FORCE']:
@@ -214,6 +219,22 @@ def download_file(_url, _to = None):
             for chunk in response.iter_content(chunk_size=8192):
                 fh.write(chunk)
         CONFIG['TQDM'].update()
+
+# Windows has some picky requirements about file names
+# So let's replace known bad characters with '-'
+def sanitize_path(_path : str) -> str:
+    if sys.platform.startswith('win'):
+        # Ok, we need to leave on the ':' if it is like 'D:\'
+        # otherwise, we need to remove it.
+        new_path = ''
+        search_path = _path
+        if WINDOWS_DRIVE_REGEX.match(_path):
+            new_path += _path[0:3]
+            search_path = _path[3:]
+        new_path += SANATIZE_PATH_WINDOWS_REGEX.sub('-', search_path)
+        return new_path
+    else:
+        return _path
 
 def get_cookies():
     if CONFIG['BROWSER'] == 'firefox':
