@@ -32,7 +32,7 @@ CONFIG = {
     'TQDM' : None,
     'MAX_URL_ATTEMPTS' : 5,
     'URL_RETRY_WAIT' : 5,
-    'POST_DOWNLOAD_SLEEP' : 1,
+    'POST_DOWNLOAD_WAIT' : 1,
 }
 MAX_THREADS = 32
 DEFAULT_THREADS = 5
@@ -88,6 +88,24 @@ def main() -> int:
         default = False,
         help = 'Always re-download existing albums, even if they already exist.',
     )
+    parser.add_argument(
+        '--wait-after-download',
+        type = float,
+        default = 1,
+        help = 'How long, in seconds, to wait after successfully completing a download before downloading the next file. Defaults to \'1\'.',
+    )
+    parser.add_argument(
+        '--max-download-attempts',
+        type = int,
+        default = 5,
+        help = 'How many times to try downloading any individual files before giving up on it. Defaults to \'5\'.',
+    )
+    parser.add_argument(
+        '--retry-wait',
+        type = float,
+        default = 5,
+        help = 'How long, in seconds, to wait before trying to download a file again after a failure. Defaults to \'5\'.',
+    )
     parser.add_argument('--verbose', '-v', action='count', default = 0)
     args = parser.parse_args()
 
@@ -100,8 +118,19 @@ def main() -> int:
     CONFIG['FORMAT'] = args.format
     CONFIG['FORCE'] = args.force
 
+    if args.wait_after_download < 0:
+        parser.error('--wait-after-download must be at least 0.')
+    if args.max_download_attempts < 1:
+        parser.error('--max-download-attempts  must be at least 1.')
+    if args.retry_wait < 0:
+        parser.error('--retry-wait must be at least 0.')
+    CONFIG['POST_DOWNLOAD_WAIT'] = args.wait_after_download
+    CONFIG['MAX_URL_ATTEMPTS'] = args.max_download_attempts
+    CONFIG['URL_RETRY_WAIT'] = args.retry_wait
+
     if CONFIG['VERBOSE']: print(args)
     if CONFIG['FORCE']: print('WARNING: --force flag set, existing files will be overwritten.')
+
     links = get_download_links_for_user(args.username)
     if CONFIG['VERBOSE']: print('Found [{}] links for [{}]\'s collection.'.format(len(links), args.username))
     if not links:
@@ -189,7 +218,7 @@ def download_album(_album_url : str, _attempt : int = 1) -> None:
         download_url = data['download_items'][0]['downloads'][CONFIG['FORMAT']]['url']
         download_file(download_url, artist)
     except HTTPException as e:
-        if _attempt <= CONFIG['MAX_URL_ATTEMPTS']:
+        if _attempt < CONFIG['MAX_URL_ATTEMPTS']:
             if CONFIG['VERBOSE'] >=2: CONFIG['TQDM'].write('WARN: HTTP Error on attempt # [{}] to download the album at [{}]. Trying again...'.format(_attempt, _album_url))
             time.sleep(CONFIG['URL_RETRY_WAIT'])
             download_album(_album_url, _attempt + 1)
@@ -201,7 +230,7 @@ def download_album(_album_url : str, _attempt : int = 1) -> None:
         # only tell TQDM we're done on the first call
         if _attempt == 1:
             CONFIG['TQDM'].update()
-            time.sleep(CONFIG['POST_DOWNLOAD_SLEEP'])
+            time.sleep(CONFIG['POST_DOWNLOAD_WAIT'])
 
 def download_file(_url : str, _to: str = None, _attempt : int = 1) -> None:
     try:
@@ -237,7 +266,7 @@ def download_file(_url : str, _to: str = None, _attempt : int = 1) -> None:
                 for chunk in response.iter_content(chunk_size=8192):
                     fh.write(chunk)
     except HTTPError as e:
-        if _attempt <= CONFIG['MAX_URL_ATTEMPTS']:
+        if _attempt < CONFIG['MAX_URL_ATTEMPTS']:
             if CONFIG['VERBOSE'] >=2: CONFIG['TQDM'].write('WARN: HTTP Error on attempt # [{}] to download the file at [{}]. Trying again...'.format(_attempt, _url))
             time.sleep(CONFIG['URL_RETRY_WAIT'])
             download_file(_url, _to, _attempt + 1)

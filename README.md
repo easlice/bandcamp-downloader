@@ -5,7 +5,11 @@ It requires you to have a browser with a logged in session of bandcamp open. Coo
 
 Supported browsers are the same as in [browser_cookie3](https://github.com/borisbabic/browser_cookie3): Chrome, Chromium, Firefox, Brave, Opera, and Edge
 
-Albums will be downloaded into their zip files and singles will just be plain files. Downloads are organized by Artist name. Downloads will happen in parallel, by default using a pool of 5 threads. Already existing files of the same name will have their file sizes checked against what it should be, and if they are the same, the download will be skipped, otherwise it will be over-written.
+Albums will be downloaded into their zip files and singles will just be plain files. Downloads are organized by Artist name. Already existing files of the same name will have their file sizes checked against what it should be, and if they are the same, the download will be skipped, otherwise it will be over-written. You can use the `--force` flag to always overwrite existing files.
+
+Downloads will happen in parallel, by default using a pool of 5 threads. You can configure how many threads to use with the `--parallel-downloads`/`-p` flag. After each download a thread will wait 1 second before trying the next download. This is to try and not overwhelm (and be rejected by) the bandcamp servers. This can be configured with the `--wait-after-download` flag.
+
+If a download should fail because of an HTTP/network error, it will be retried again after a short wait. By default a file download will be attempted at most 5 times. This can be configured with the `--max-download-attempts` flag. By default, a failed download will wait 5 seconds before trying again. This can be configured by the `--retry-wait` flag.
 
 By default, files are downloaded in mp3-320 format, but that can be changed with the `--format`/`-f` flag.
 
@@ -65,7 +69,10 @@ usage: bandcamp-downloader.py [-h]
                               [--directory DIRECTORY]
                               [--format {aac-hi,aiff-lossless,alac,flac,mp3-320,mp3-v0,vorbis,wav}]
                               [--parallel-downloads PARALLEL_DOWNLOADS]
-                              [--force] [--verbose]
+                              [--force]
+                              [--wait-after-download WAIT_AFTER_DOWNLOAD]
+                              [--max-download-attempts MAX_DOWNLOAD_ATTEMPTS]
+                              [--retry-wait RETRY_WAIT] [--verbose]
                               username
 
 Download your collection from bandcamp. Requires a logged in session in a
@@ -95,20 +102,29 @@ optional arguments:
                         between 1 and 32
   --force               Always re-download existing albums, even if they
                         already exist.
+  --wait-after-download WAIT_AFTER_DOWNLOAD
+                        How long, in seconds, to wait after successfully
+                        completing a download before downloading the next
+                        file. Defaults to '1'.
+  --max-download-attempts MAX_DOWNLOAD_ATTEMPTS
+                        How many times to try downloading any individual files
+                        before giving up on it. Defaults to '5'.
+  --retry-wait RETRY_WAIT
+                        How long, in seconds, to wait before trying to
+                        download a file again after a failure. Defaults to
+                        '5'.
   --verbose, -v
 ```
 
 ## Development and Contributing
 
-When modifiying required packages, please:
+When modifying required packages, please:
 
 * Add to Poetry (`poetry add`)
 * Then update the `requirements.txt` (`poetry run pip freeze > requirements.txt`)
 * Commit all updated files
 
 ## Notes
-
-If things are not working correctly, but are also not spitting out errors, try setting `-p 1` to disable parallelism. If multi-threading is used, threads won't show crashes/stack traces.
 
 If you have a logged in session in the browser, have used the `--browser`/`-b` flag correctly, and still are being told that the script isn't finding any albums, check out the page for [browser_cookie3](https://github.com/borisbabic/browser_cookie3), you might need to do some configuring in your browser to make the cookies available to the script.
 
