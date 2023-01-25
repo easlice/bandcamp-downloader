@@ -1,7 +1,8 @@
-#!/usr/bin/python3
+#!/usr/bin/env python3
 
 import argparse
 import html
+import http
 import json
 import os
 import re
@@ -65,6 +66,7 @@ def main() -> int:
         choices = SUPPORTED_BROWSERS,
         help='The browser whose cookies to use for accessing bandcamp. Defaults to "firefox"'
     )
+    parser.add_argument('--cookies', type=str, help='Path to cookies.txt')
     parser.add_argument(
         '--directory', '-d',
         default = os.getcwd(),
@@ -112,6 +114,7 @@ def main() -> int:
     if args.parallel_downloads < 1 or args.parallel_downloads > MAX_THREADS:
         parser.error('--parallel-downloads must be between 1 and 32.')
 
+    CONFIG['COOKIES'] = args.cookies
     CONFIG['VERBOSE'] = args.verbose
     CONFIG['OUTPUT_DIR'] = os.path.normcase(args.directory)
     CONFIG['BROWSER'] = args.browser
@@ -299,6 +302,10 @@ def sanitize_path(_path : str) -> str:
         return _path
 
 def get_cookies():
+    if CONFIG['COOKIES']:
+        cj = http.cookiejar.MozillaCookieJar(CONFIG['COOKIES'])
+        cj.load()
+        return cj
     if CONFIG['BROWSER'] == 'firefox':
         return browser_cookie3.firefox(domain_name = 'bandcamp.com')
     elif CONFIG['BROWSER'] == 'chrome':

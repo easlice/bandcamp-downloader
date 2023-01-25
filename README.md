@@ -5,6 +5,8 @@ It requires you to have a browser with a logged in session of bandcamp open. Coo
 
 Supported browsers are the same as in [browser_cookie3](https://github.com/borisbabic/browser_cookie3): Chrome, Chromium, Firefox, Brave, Opera, and Edge
 
+Alternatively, you can use a [Netscape format cookies](https://curl.se/docs/http-cookies.html) file.
+
 Albums will be downloaded into their zip files and singles will just be plain files. Downloads are organized by Artist name. Already existing files of the same name will have their file sizes checked against what it should be, and if they are the same, the download will be skipped, otherwise it will be over-written. You can use the `--force` flag to always overwrite existing files.
 
 Downloads will happen in parallel, by default using a pool of 5 threads. You can configure how many threads to use with the `--parallel-downloads`/`-p` flag. After each download a thread will wait 1 second before trying the next download. This is to try and not overwhelm (and be rejected by) the bandcamp servers. This can be configured with the `--wait-after-download` flag.
@@ -66,6 +68,7 @@ poetry run python bandcamp-downloader.py [arguments]
 ```
 usage: bandcamp-downloader.py [-h]
                               [--browser {firefox,chrome,chromium,brave,opera,edge}]
+                              [--cookies /path/to/cookies.txt]
                               [--directory DIRECTORY]
                               [--format {aac-hi,aiff-lossless,alac,flac,mp3-320,mp3-v0,vorbis,wav}]
                               [--parallel-downloads PARALLEL_DOWNLOADS]
@@ -90,6 +93,8 @@ optional arguments:
   --browser {firefox,chrome,chromium,brave,opera,edge}, -b {firefox,chrome,chromium,brave,opera,edge}
                         The browser whose cookies to use for accessing
                         bandcamp. Defaults to "firefox"
+  --cookies PATH        Specifies a path to a Netscape/Mozilla format cookies file. Takes precedence
+                        over --browser option
   --directory DIRECTORY, -d DIRECTORY
                         The directory to download albums to. Defaults to the
                         current directory.
