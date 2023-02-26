@@ -213,6 +213,10 @@ def download_album(_album_url : str, _attempt : int = 1) -> None:
         artist = data['download_items'][0]['artist']
         album = data['download_items'][0]['title']
 
+        if not 'downloads' in data['download_items'][0]:
+            CONFIG['TQDM'].write('WARN: Album [{}] at url [{}] has no downloads available.'.format(album, _album_url))
+            return
+
         if not CONFIG['FORMAT'] in data['download_items'][0]['downloads']:
             CONFIG['TQDM'].write('WARN: Album [{}] at url [{}] does not have a download for format [{}].'.format(album, _album_url, CONFIG['FORMAT']))
             return
