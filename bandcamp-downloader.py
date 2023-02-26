@@ -9,6 +9,7 @@ import re
 import sys
 import time
 import urllib.parse
+import traceback
 
 from concurrent.futures import ThreadPoolExecutor
 
@@ -300,8 +301,7 @@ def download_file(_url : str, _track_info : dict = None, _attempt : int = 1) -> 
 
 def print_exception(_e : Exception, _msg : str = '') -> None:
     CONFIG['TQDM'].write('\nERROR: {}'.format(_msg))
-    CONFIG['TQDM'].write(str(_e))
-    CONFIG['TQDM'].write(str(sys.exc_info()))
+    CONFIG['TQDM'].write('\n'.join(traceback.format_exception(_e)))
     CONFIG['TQDM'].write('\n')
 
 
@@ -318,28 +318,19 @@ def sanitize_path(_path : str) -> str:
             search_path = _path[3:]
         new_path += SANATIZE_PATH_WINDOWS_REGEX.sub('-', search_path)
         return new_path
-    else:
-        return _path
+    return _path
 
 def get_cookies():
     if CONFIG['COOKIES']:
         cj = http.cookiejar.MozillaCookieJar(CONFIG['COOKIES'])
         cj.load()
         return cj
-    if CONFIG['BROWSER'] == 'firefox':
-        return browser_cookie3.firefox(domain_name = 'bandcamp.com')
-    elif CONFIG['BROWSER'] == 'chrome':
-        return browser_cookie3.chrome(domain_name = 'bandcamp.com')
-    elif CONFIG['BROWSER'] == 'brave':
-        return browser_cookie3.brave(domain_name = 'bandcamp.com')
-    elif CONFIG['BROWSER'] == 'edge':
-        return browser_cookie3.edge(domain_name = 'bandcamp.com')
-    elif CONFIG['BROWSER'] == 'chromium':
-        return browser_cookie3.chromium(domain_name = 'bandcamp.com')
-    elif CONFIG['BROWSER'] == 'opera':
-        return browser_cookie3.opera(domain_name = 'bandcamp.com')
-    else:
-        raise Exception('Browser type if [{}] is unknown. Can\'t pull cookies, so can\'t authenticate with bandcamp.'.format(CONFIG['BROWSER']))
+
+    try:
+        func = getattr(browser_cookie3, CONFIG['BROWSER'])
+        return func(domain_name = 'bandcamp.com')
+    except AttributeError:
+        raise Exception('Browser type [{}] is unknown. Can\'t pull cookies, so can\'t authenticate with bandcamp.'.format(CONFIG['BROWSER']))
 
 if __name__ == '__main__':
     sys.exit(main())
