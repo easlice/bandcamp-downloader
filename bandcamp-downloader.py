@@ -15,7 +15,6 @@ from concurrent.futures import ThreadPoolExecutor
 # These require pip installs
 from bs4 import BeautifulSoup, SoupStrainer
 import requests
-from requests import HTTPError
 import browser_cookie3
 from tqdm import tqdm
 
@@ -225,6 +224,10 @@ def download_album(_album_url : str, _attempt : int = 1) -> None:
         data = json.loads(html.unescape(div.get('data-blob')))
         album = data['download_items'][0]['title']
 
+        if not 'downloads' in data['download_items'][0]:
+            CONFIG['TQDM'].write('WARN: Album [{}] at url [{}] has no downloads available.'.format(album, _album_url))
+            return
+
         if not CONFIG['FORMAT'] in data['download_items'][0]['downloads']:
             CONFIG['TQDM'].write('WARN: Album [{}] at url [{}] does not have a download for format [{}].'.format(album, _album_url, CONFIG['FORMAT']))
             return
@@ -232,9 +235,9 @@ def download_album(_album_url : str, _attempt : int = 1) -> None:
         download_url = data['download_items'][0]['downloads'][CONFIG['FORMAT']]['url']
         track_info = {key: data['download_items'][0][key] for key in TRACK_INFO_KEYS}
         download_file(download_url, track_info)
-    except HTTPException as e:
+    except IOError as e:
         if _attempt < CONFIG['MAX_URL_ATTEMPTS']:
-            if CONFIG['VERBOSE'] >=2: CONFIG['TQDM'].write('WARN: HTTP Error on attempt # [{}] to download the album at [{}]. Trying again...'.format(_attempt, _album_url))
+            if CONFIG['VERBOSE'] >=2: CONFIG['TQDM'].write('WARN: I/O Error on attempt # [{}] to download the album at [{}]. Trying again...'.format(_attempt, _album_url))
             time.sleep(CONFIG['URL_RETRY_WAIT'])
             download_album(_album_url, _attempt + 1)
         else:
@@ -256,6 +259,7 @@ def download_file(_url : str, _track_info : dict = None, _attempt : int = 1) -> 
         ) as response:
             response.raise_for_status()
 
+            expected_size = int(response.headers['content-length'])
             filename_match = FILENAME_REGEX.search(response.headers['content-disposition'])
             original_filename = urllib.parse.unquote(filename_match.group(1)) if filename_match else _url.split('/')[-1]
             extension = os.path.splitext(original_filename)[1]
@@ -269,7 +273,6 @@ def download_file(_url : str, _track_info : dict = None, _attempt : int = 1) -> 
                 if CONFIG['FORCE']:
                     if CONFIG['VERBOSE']: CONFIG['TQDM'].write('--force flag was given. Overwriting existing file at [{}].'.format(file_path))
                 else:
-                    expected_size = int(response.headers['content-length'])
                     actual_size = os.stat(file_path).st_size
                     if expected_size == actual_size:
                         if CONFIG['VERBOSE'] >= 3: CONFIG['TQDM'].write('Skipping album that already exists: [{}]'.format(file_path))
@@ -282,9 +285,12 @@ def download_file(_url : str, _track_info : dict = None, _attempt : int = 1) -> 
             with open(file_path, 'wb') as fh:
                 for chunk in response.iter_content(chunk_size=8192):
                     fh.write(chunk)
-    except HTTPError as e:
+                actual_size = fh.tell()
+            if expected_size != actual_size:
+                raise IOError('Incomplete read. {} bytes read, {} bytes expected'.format(actual_size, expected_size))
+    except IOError as e:
         if _attempt < CONFIG['MAX_URL_ATTEMPTS']:
-            if CONFIG['VERBOSE'] >=2: CONFIG['TQDM'].write('WARN: HTTP Error on attempt # [{}] to download the file at [{}]. Trying again...'.format(_attempt, _url))
+            if CONFIG['VERBOSE'] >=2: CONFIG['TQDM'].write('WARN: I/O Error on attempt # [{}] to download the file at [{}]. Trying again...'.format(_attempt, _url))
             time.sleep(CONFIG['URL_RETRY_WAIT'])
             download_file(_url, _track_info, _attempt + 1)
         else:
