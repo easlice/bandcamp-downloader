@@ -36,6 +36,7 @@ CONFIG = {
 }
 MAX_THREADS = 32
 DEFAULT_THREADS = 5
+DEFAULT_FILENAME_FORMAT = '{artist}/{artist} - {title}'
 SUPPORTED_FILE_FORMATS = [
     'aac-hi',
     'aiff-lossless',
@@ -54,6 +55,11 @@ SUPPORTED_BROWSERS = [
     'opera',
     'edge'
 ]
+TRACK_INFO_KEYS = [
+    'item_id',
+    'artist',
+    'title'
+]
 
 def main() -> int:
     parser = argparse.ArgumentParser(description = 'Download your collection from bandcamp. Requires a logged in session in a supported browser so that the browser cookies can be used to authenticate with bandcamp. Albums are saved into directories named after their artist. Already existing albums will have their file size compared to what is expected and re-downloaded if the sizes differ. Otherwise already existing albums will not be re-downloaded.')
@@ -70,6 +76,11 @@ def main() -> int:
         '--directory', '-d',
         default = os.getcwd(),
         help='The directory to download albums to. Defaults to the current directory.'
+    )
+    parser.add_argument(
+        '--filename-format',
+        default = DEFAULT_FILENAME_FORMAT,
+        help='The filename format for downloaded tracks. Default is \'{}\'. All placeholders: {}'.format(DEFAULT_FILENAME_FORMAT, ', '.join(TRACK_INFO_KEYS))
     )
     parser.add_argument(
         '--format', '-f',
@@ -116,6 +127,7 @@ def main() -> int:
     CONFIG['COOKIES'] = args.cookies
     CONFIG['VERBOSE'] = args.verbose
     CONFIG['OUTPUT_DIR'] = os.path.normcase(args.directory)
+    CONFIG['FILENAME_FORMAT'] = args.filename_format
     CONFIG['BROWSER'] = args.browser
     CONFIG['FORMAT'] = args.format
     CONFIG['FORCE'] = args.force
@@ -210,7 +222,6 @@ def download_album(_album_url : str, _attempt : int = 1) -> None:
             return
 
         data = json.loads(html.unescape(div.get('data-blob')))
-        artist = data['download_items'][0]['artist']
         album = data['download_items'][0]['title']
 
         if not 'downloads' in data['download_items'][0]:
@@ -222,7 +233,8 @@ def download_album(_album_url : str, _attempt : int = 1) -> None:
             return
 
         download_url = data['download_items'][0]['downloads'][CONFIG['FORMAT']]['url']
-        download_file(download_url, artist)
+        track_info = {key: data['download_items'][0][key] for key in TRACK_INFO_KEYS}
+        download_file(download_url, track_info)
     except IOError as e:
         if _attempt < CONFIG['MAX_URL_ATTEMPTS']:
             if CONFIG['VERBOSE'] >=2: CONFIG['TQDM'].write('WARN: I/O Error on attempt # [{}] to download the album at [{}]. Trying again...'.format(_attempt, _album_url))
@@ -238,7 +250,7 @@ def download_album(_album_url : str, _attempt : int = 1) -> None:
             CONFIG['TQDM'].update()
             time.sleep(CONFIG['POST_DOWNLOAD_WAIT'])
 
-def download_file(_url : str, _to: str = None, _attempt : int = 1) -> None:
+def download_file(_url : str, _track_info : dict = None, _attempt : int = 1) -> None:
     try:
         with requests.get(
                 _url,
@@ -249,8 +261,10 @@ def download_file(_url : str, _to: str = None, _attempt : int = 1) -> None:
 
             expected_size = int(response.headers['content-length'])
             filename_match = FILENAME_REGEX.search(response.headers['content-disposition'])
-            filename = urllib.parse.unquote(filename_match.group(1)) if filename_match else _url.split('/')[-1]
-            file_path = os.path.join(CONFIG['OUTPUT_DIR'], _to, filename)
+            original_filename = urllib.parse.unquote(filename_match.group(1)) if filename_match else _url.split('/')[-1]
+            extension = os.path.splitext(original_filename)[1]
+            filename = CONFIG['FILENAME_FORMAT'].format(**_track_info) + extension
+            file_path = os.path.join(CONFIG['OUTPUT_DIR'], filename)
 
             # Remove not allowed path characters
             file_path = sanitize_path(file_path)
@@ -278,7 +292,7 @@ def download_file(_url : str, _to: str = None, _attempt : int = 1) -> None:
         if _attempt < CONFIG['MAX_URL_ATTEMPTS']:
             if CONFIG['VERBOSE'] >=2: CONFIG['TQDM'].write('WARN: I/O Error on attempt # [{}] to download the file at [{}]. Trying again...'.format(_attempt, _url))
             time.sleep(CONFIG['URL_RETRY_WAIT'])
-            download_file(_url, _to, _attempt + 1)
+            download_file(_url, _track_info, _attempt + 1)
         else:
             print_exception(e, 'An exception occurred trying to download file url [{}]:'.format(_url))
     except Exception as e:
