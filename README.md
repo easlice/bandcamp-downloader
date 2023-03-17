@@ -34,13 +34,19 @@ Please either check your WSL dbus installation/configuration, or run the script 
 Install the script dependencies by running:
 
 ```
-pip install -r requirements.txt
+pip install .
 ```
 
 Run the program:
 
 ```
 ./bandcamp-downloader.py [arguments]
+```
+
+If you run into errors or dependency issues, you can try installing exact dependency versions by running:
+
+```
+pip install -r requirements.txt
 ```
 
 ## Setup via Poetry
@@ -131,7 +137,7 @@ optional arguments:
 When modifying required packages, please:
 
 * Add to Poetry (`poetry add`)
-* Then update the `requirements.txt` (`poetry run pip freeze > requirements.txt`)
+* Then update the `requirements.txt` (`poetry run pip freeze > requirements.txt`) and the dependencies in `setup.py`.
 * Commit all updated files
 
 ## Notes
