@@ -70,6 +70,7 @@ usage: bandcamp-downloader.py [-h]
                               [--browser {firefox,chrome,chromium,brave,opera,edge}]
                               [--cookies /path/to/cookies.txt]
                               [--directory DIRECTORY]
+                              [--filename-format FILENAME_FORMAT]
                               [--format {aac-hi,aiff-lossless,alac,flac,mp3-320,mp3-v0,vorbis,wav}]
                               [--parallel-downloads PARALLEL_DOWNLOADS]
                               [--force]
@@ -98,6 +99,10 @@ optional arguments:
   --directory DIRECTORY, -d DIRECTORY
                         The directory to download albums to. Defaults to the
                         current directory.
+  --filename-format FILENAME_FORMAT
+                        The filename format for downloaded tracks. Default is
+                        '{artist}/{artist} - {title}'.
+                        All placeholders: item_id, artist, title
   --format {aac-hi,aiff-lossless,alac,flac,mp3-320,mp3-v0,vorbis,wav}, -f {aac-hi,aiff-lossless,alac,flac,mp3-320,mp3-v0,vorbis,wav}
                         What format do download the songs in. Default is
                         'mp3-320'.
