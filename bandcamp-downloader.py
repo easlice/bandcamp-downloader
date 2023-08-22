@@ -37,7 +37,7 @@ CONFIG = {
 }
 MAX_THREADS = 32
 DEFAULT_THREADS = 5
-DEFAULT_FILENAME_FORMAT = '{artist}/{artist} - {title}'
+DEFAULT_FILENAME_FORMAT = os.path.join('{artist}', '{artist} - {title}')
 SUPPORTED_FILE_FORMATS = [
     'aac-hi',
     'aiff-lossless',
