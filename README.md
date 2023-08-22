@@ -17,10 +17,6 @@ By default, files are downloaded in mp3-320 format, but that can be changed with
 
 ## Known Issues
 
-### Failure to read cookies on Windows for Chrome/Chromium/Brave
-
-This is a known issue with the [browser-cookie3](https://github.com/borisbabic/browser_cookie3) module. I've submitted a PR to fix it [here](https://github.com/borisbabic/browser_cookie3/pull/122). In the meantime, firefox should still work fine, and I have created a branch [here](https://github.com/easlice/bandcamp-downloader/tree/with-local-browser-cookies3-patch) with a patched browser_cookie3 module that should work.
-
 ### Running the script on WSL crashes with a `DBUS_SESSION_BUS_ADDRESS` error
 
 This is seems to be a WSL issue. The browser_cookie3 module  tries to get a secret from your keyring via dbus, but WSL may not have dbus installed, or may not have it set up as expected. As such, you may see the following error:
@@ -28,6 +24,10 @@ This is seems to be a WSL issue. The browser_cookie3 module  tries to get a secr
 `secretstorage.exceptions.SecretServiceNotAvailableException: Environment variable DBUS_SESSION_BUS_ADDRESS is unset`
 
 Please either check your WSL dbus installation/configuration, or run the script nativity on windows.
+
+### "Unable to get key for cookie decryption" error, especially in Chrome
+
+There is currently an issue with [browser_cookie3](https://github.com/borisbabic/browser_cookie3). This has been reported within this repo [here](https://github.com/easlice/bandcamp-downloader/issues/17) and you can see the status of it upstream [here](https://github.com/borisbabic/browser_cookie3/issues/141).
 
 ## Manual Setup
 
@@ -40,7 +40,7 @@ pip install .
 Run the program:
 
 ```
-./bandcamp-downloader.py [arguments]
+bandcamp-downloader.py [arguments]
 ```
 
 If you run into errors or dependency issues, you can try installing exact dependency versions by running:
@@ -144,4 +144,8 @@ When modifying required packages, please:
 
 If you have a logged in session in the browser, have used the `--browser`/`-b` flag correctly, and still are being told that the script isn't finding any albums, check out the page for [browser_cookie3](https://github.com/borisbabic/browser_cookie3), you might need to do some configuring in your browser to make the cookies available to the script.
 
+Similarly, if you have installed your browser via a flatpack the cookies will not be in the default location. You can work around this by either using `--cookies` to specify the path or create a symlink to where the browser would normally have it's config directory be.
+
 If you are downloading your collection in multiple formats, the script can't tell if an already downloaded zip file is the same format or not, and will happily overwrite it. So make sure to use different directories for different formats, either by running the script somewhere else or by supplying directories to the `--directory`/`-d` flag.
+
+If you are running windows and having issues getting things running (that is not related to WSL crashes, DBUS errors, or Visual C++ errors) you might have some luck with some of the information in [this issue report](https://github.com/easlice/bandcamp-downloader/issues/21).
