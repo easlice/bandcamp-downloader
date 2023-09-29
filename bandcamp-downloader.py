@@ -23,7 +23,7 @@ USER_URL = 'https://bandcamp.com/{}'
 COLLECTION_POST_URL = 'https://bandcamp.com/api/fancollection/1/collection_items'
 FILENAME_REGEX = re.compile('filename\\*=UTF-8\'\'(.*)')
 WINDOWS_DRIVE_REGEX = re.compile(r'[a-zA-Z]:\\')
-SANATIZE_PATH_WINDOWS_REGEX = re.compile(r'[<>:"/|?*]')
+SANATIZE_PATH_WINDOWS_REGEX = re.compile(r'[<>:"/|?*\\]')
 CONFIG = {
     'VERBOSE' : False,
     'OUTPUT_DIR' : None,
@@ -264,11 +264,12 @@ def download_file(_url : str, _track_info : dict = None, _attempt : int = 1) -> 
             filename_match = FILENAME_REGEX.search(response.headers['content-disposition'])
             original_filename = urllib.parse.unquote(filename_match.group(1)) if filename_match else _url.split('/')[-1]
             extension = os.path.splitext(original_filename)[1]
-            filename = CONFIG['FILENAME_FORMAT'].format(**_track_info) + extension
+            # Sanitize all input values for formatting
+            safe_track_info = {
+                key: (sanitize_filename(value) if type(value) == str else value) for key, value in _track_info.items()
+            } if _track_info else {}
+            filename = CONFIG['FILENAME_FORMAT'].format(**safe_track_info) + extension
             file_path = os.path.join(CONFIG['OUTPUT_DIR'], filename)
-
-            # Remove not allowed path characters
-            file_path = sanitize_path(file_path)
 
             if os.path.exists(file_path):
                 if CONFIG['FORCE']:
@@ -307,7 +308,7 @@ def print_exception(_e : Exception, _msg : str = '') -> None:
 
 # Windows has some picky requirements about file names
 # So let's replace known bad characters with '-'
-def sanitize_path(_path : str) -> str:
+def sanitize_filename(_path : str) -> str:
     if sys.platform.startswith('win'):
         # Ok, we need to leave on the ':' if it is like 'D:\'
         # otherwise, we need to remove it.
@@ -318,7 +319,9 @@ def sanitize_path(_path : str) -> str:
             search_path = _path[3:]
         new_path += SANATIZE_PATH_WINDOWS_REGEX.sub('-', search_path)
         return new_path
-    return _path
+    else:
+        # Remove `/`
+        return _path.replace('/', '-')
 
 def get_cookies():
     if CONFIG['COOKIES']:
