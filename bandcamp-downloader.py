@@ -119,6 +119,12 @@ def main() -> int:
         default = 5,
         help = 'How long, in seconds, to wait before trying to download a file again after a failure. Defaults to \'5\'.',
     )
+    parser.add_argument(
+        '--dry-run',
+        action = 'store_true',
+        default = False,
+        help = 'Don\'t actually download files, just process all the web data and report what would have been done.',
+    )
     parser.add_argument('--verbose', '-v', action='count', default = 0)
     args = parser.parse_args()
 
@@ -132,6 +138,7 @@ def main() -> int:
     CONFIG['BROWSER'] = args.browser
     CONFIG['FORMAT'] = args.format
     CONFIG['FORCE'] = args.force
+    CONFIG['DRY_RUN'] = args.dry_run
 
     if args.wait_after_download < 0:
         parser.error('--wait-after-download must be at least 0.')
@@ -283,6 +290,8 @@ def download_file(_url : str, _track_info : dict = None, _attempt : int = 1) -> 
                         if CONFIG['VERBOSE'] >= 2: CONFIG['TQDM'].write('Album at [{}] is the wrong size. Expected [{}] but was [{}]. Re-downloading.'.format(file_path, expected_size, actual_size))
 
             if CONFIG['VERBOSE'] >= 2: CONFIG['TQDM'].write('Album being saved to [{}]'.format(file_path))
+            if CONFIG['DRY_RUN']:
+                return
             os.makedirs(os.path.dirname(file_path), exist_ok=True)
             with open(file_path, 'wb') as fh:
                 for chunk in response.iter_content(chunk_size=8192):
