@@ -93,7 +93,8 @@ downloaded if the sizes differ. Otherwise already existing albums will not be
 re-downloaded.
 
 positional arguments:
-  username              Your bandcamp username
+  username              Your bandcamp username, as it appears at the end of
+                        your bandcamp collection url, I.E. bandcamp.com/user_name
 
 optional arguments:
   -h, --help            show this help message and exit
@@ -110,7 +111,7 @@ optional arguments:
                         '{artist}/{artist} - {title}'.
                         All placeholders: item_id, artist, title
   --format {aac-hi,aiff-lossless,alac,flac,mp3-320,mp3-v0,vorbis,wav}, -f {aac-hi,aiff-lossless,alac,flac,mp3-320,mp3-v0,vorbis,wav}
-                        What format do download the songs in. Default is
+                        What format to download the songs in. Default is
                         'mp3-320'.
   --parallel-downloads PARALLEL_DOWNLOADS, -p PARALLEL_DOWNLOADS
                         How many threads to use for parallel downloads. Set to
@@ -144,7 +145,7 @@ When modifying required packages, please:
 
 If you have a logged in session in the browser, have used the `--browser`/`-b` flag correctly, and still are being told that the script isn't finding any albums, check out the page for [browser_cookie3](https://github.com/borisbabic/browser_cookie3), you might need to do some configuring in your browser to make the cookies available to the script.
 
-Similarly, if you have installed your browser via a flatpack the cookies will not be in the default location. You can work around this by either using `--cookies` to specify the path or create a symlink to where the browser would normally have it's config directory be.
+Similarly, if you have installed your browser via a flatpack the cookies will not be in the default location. You can work around this by either using `--cookies` to specify the path or create a symlink to where the browser would normally have its config directory be.
 
 If you are downloading your collection in multiple formats, the script can't tell if an already downloaded zip file is the same format or not, and will happily overwrite it. So make sure to use different directories for different formats, either by running the script somewhere else or by supplying directories to the `--directory`/`-d` flag.
 
