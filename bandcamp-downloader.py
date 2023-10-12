@@ -70,9 +70,9 @@ def main() -> int:
         type=str,
         default = 'firefox',
         choices = SUPPORTED_BROWSERS,
-        help='The browser whose cookies to use for accessing bandcamp. Defaults to "firefox"'
+        help='The browser whose cookies to use for accessing bandcamp. Defaults to "firefox". Use with --cookies to specifiy the path.'
     )
-    parser.add_argument('--cookies', type=str, help='Path to cookies.txt')
+    parser.add_argument('--cookies', type=str, help='Path to cookies.txt. When used with browser, that browsers format will be used for parsing.')
     parser.add_argument(
         '--directory', '-d',
         default = os.getcwd(),
@@ -221,6 +221,7 @@ def get_download_links_for_user(_user : str) -> [str]:
 
 def download_album(_album_url : str, _attempt : int = 1) -> None:
     try:
+        return
         soup = BeautifulSoup(
             requests.get(
                 _album_url,
@@ -338,16 +339,18 @@ def sanitize_filename(_path : str) -> str:
         return _path.replace('/', '-')
 
 def get_cookies():
+
+    if CONFIG['BROWSER']:
+        try:
+            func = getattr(browser_cookie3, CONFIG['BROWSER'])
+            return func(domain_name = 'bandcamp.com', cookie_file = CONFIG['COOKIES'])
+        except AttributeError:
+            raise Exception('Browser type [{}] is unknown. Can\'t pull cookies, so can\'t authenticate with bandcamp.'.format(CONFIG['BROWSER']))
+
     if CONFIG['COOKIES']:
         cj = http.cookiejar.MozillaCookieJar(CONFIG['COOKIES'])
         cj.load()
         return cj
-
-    try:
-        func = getattr(browser_cookie3, CONFIG['BROWSER'])
-        return func(domain_name = 'bandcamp.com')
-    except AttributeError:
-        raise Exception('Browser type [{}] is unknown. Can\'t pull cookies, so can\'t authenticate with bandcamp.'.format(CONFIG['BROWSER']))
 
 if __name__ == '__main__':
     sys.exit(main())
