@@ -6,7 +6,7 @@ authors = []
 
 [tool.poetry.dependencies]
 python = "^3.9"
-bs4 = "^0.0.1"
+beautifulsoup4 = "^4.12.2"
 requests = "^2.27.1"
 browser-cookie3 = "^0.14.0"
 tqdm = "^4.64.0"
