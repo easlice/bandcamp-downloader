@@ -101,8 +101,8 @@ optional arguments:
   --browser {firefox,chrome,chromium,brave,opera,edge}, -b {firefox,chrome,chromium,brave,opera,edge}
                         The browser whose cookies to use for accessing
                         bandcamp. Defaults to "firefox"
-  --cookies PATH        Specifies a path to a Netscape/Mozilla format cookies file. Takes precedence
-                        over --browser option
+  --cookies PATH        Specifies a path to a Netscape/Mozilla format cookies file.
+                        When used with --browser, that browsers format will be used for parsing.
   --directory DIRECTORY, -d DIRECTORY
                         The directory to download albums to. Defaults to the
                         current directory.
