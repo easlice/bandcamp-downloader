@@ -38,6 +38,9 @@ CONFIG = {
 MAX_THREADS = 32
 DEFAULT_THREADS = 5
 DEFAULT_FILENAME_FORMAT = os.path.join('{artist}', '{artist} - {title}')
+# As per [1], the initial total bytes is set to a large positive integer.
+# [1] https://tqdm.github.io/docs/tqdm/#set_description
+INITIAL_TOTAL_BYTES = 1*1024*1024*1024*1024 # 1 TB
 SUPPORTED_FILE_FORMATS = [
     'aac-hi',
     'aiff-lossless',
@@ -264,6 +267,7 @@ def download_album(_album_url : str, _attempt : int = 1) -> None:
             time.sleep(CONFIG['POST_DOWNLOAD_WAIT'])
 
 def download_file(_url : str, _track_info : dict = None, _attempt : int = 1) -> None:
+    thread_tqdm = tqdm(desc = _track_info.get('title', '') if _track_info else '', total = INITIAL_TOTAL_BYTES, unit = 'bytes', unit_scale = True)
     try:
         with requests.get(
                 _url,
@@ -298,9 +302,11 @@ def download_file(_url : str, _track_info : dict = None, _attempt : int = 1) -> 
             if CONFIG['DRY_RUN']:
                 return
             os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            thread_tqdm.reset(total = expected_size)
             with open(file_path, 'wb') as fh:
                 for chunk in response.iter_content(chunk_size=8192):
                     fh.write(chunk)
+                    thread_tqdm.update(len(chunk))
                 actual_size = fh.tell()
             if expected_size != actual_size:
                 raise IOError('Incomplete read. {} bytes read, {} bytes expected'.format(actual_size, expected_size))
@@ -313,6 +319,8 @@ def download_file(_url : str, _track_info : dict = None, _attempt : int = 1) -> 
             print_exception(e, 'An exception occurred trying to download file url [{}]:'.format(_url))
     except Exception as e:
         print_exception(e, 'An exception occurred trying to download file url [{}]:'.format(_url))
+    finally:
+        thread_tqdm.close()
 
 def print_exception(_e : Exception, _msg : str = '') -> None:
     CONFIG['TQDM'].write('\nERROR: {}'.format(_msg))
