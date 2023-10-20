@@ -62,7 +62,6 @@ TRACK_INFO_KEYS = [
     'artist',
     'title'
 ]
-EPOCH = datetime.datetime.fromtimestamp(0)
 
 def main() -> int:
     parser = argparse.ArgumentParser(description = 'Download your collection from bandcamp. Requires a logged in session in a supported browser so that the browser cookies can be used to authenticate with bandcamp. Albums are saved into directories named after their artist. Already existing albums will have their file size compared to what is expected and re-downloaded if the sizes differ. Otherwise already existing albums will not be re-downloaded.')
@@ -146,7 +145,7 @@ def main() -> int:
     if args.download_since:
         CONFIG['SINCE'] = datetime.datetime.strptime(args.download_since, '%Y-%m-%d')
     else:
-        CONFIG['SINCE'] = EPOCH
+        CONFIG['SINCE'] = None
     CONFIG['FORMAT'] = args.format
     CONFIG['FORCE'] = args.force
     CONFIG['DRY_RUN'] = args.dry_run
@@ -167,7 +166,7 @@ def main() -> int:
     links = get_download_links_for_user(args.username, CONFIG['SINCE'])
     if CONFIG['VERBOSE']: print('Found [{}] links for [{}]\'s collection.'.format(len(links), args.username))
     if not links:
-        if CONFIG['SINCE'] == EPOCH:
+        if CONFIG['SINCE'] is None:
             print('WARN: No album links found for user [{}]. Are you logged in and have you selected the correct browser to pull cookies from?'.format(args.username))
         else:
             print('WARN: No album links found for user [{}] since [{}]. Are you logged in and have you selected the correct browser to pull cookies from, and is the specified time old enough?'.format(args.username, args.download_since))
@@ -199,7 +198,7 @@ def get_user_collection(_user_info : dict, _since : datetime.datetime) -> None:
     ) as response:
         response.raise_for_status()
         data = json.loads(response.text)
-        if _since == EPOCH:
+        if _since is None:
             _user_info['download_urls'] += data['redownload_urls'].values()
             return
         for item in data['items']:
