@@ -177,10 +177,10 @@ def main() -> int:
 def generate_collection_post_payload(_user_info : dict) -> None:
     # The number of items we still need is:
     #   _user_info['collection_count'] - len(_user_info['download_urls']
-    # Unfortunately the post request includes hidden items, which will
+    # Unfortunately this post request returns hidden items, which will
     # count against our request length but will not give us one of the
     # download urls we need.
-    # Because of this we request somewhat more than we actually need,
+    # Because of this we make count somewhat higher than our real target,
     # and check more_available in the response in case it still isn't enough.
     count = _user_info['collection_count'] - len(_user_info['download_urls']) + 50
     return {
@@ -208,16 +208,6 @@ def get_user_collection(_user_info : dict) -> None:
             more_available = data['more_available']
 
 def get_download_links_for_user(_user : str) -> [str]:
-    url = {"fan_id":184803,"older_than_token":"1697579887:773608077:a::","count":1000}
-    result = requests.post(
-        "https://bandcamp.com/api/fancollection/1/collection_items",
-        data={
-            "fan_id":184803,
-            "older_than_token":"1697579887:773608077:a::",
-            "count":1000
-        },
-                           data: _Data | None = None, json: Incomplete | None = None, *, params: _Params | None = ..., headers: _HeadersMapping | None = ..., cookies: RequestsCookieJar | _TextMapping | None = ..., files: _Files | None = ..., auth: _Auth | None = ..., timeout: _Timeout | None = ..., allow_redirects: bool = ..., proxies: _TextMapping | None = ..., hooks: _HooksInput | None = ..., stream: bool | None = ..., verify: _Verify | None = ..., cert: _Cert | None = ...) -> Response
-)
     print('Retrieving album links from user [{}]\'s collection.'.format(_user))
 
     soup = BeautifulSoup(
