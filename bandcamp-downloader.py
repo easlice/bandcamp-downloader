@@ -189,7 +189,7 @@ def fetch_items(_url : str, _user_id : str, _last_token : str, _count : int) -> 
         data = json.loads(response.text)
         return data['redownload_urls'].values()
 
-def get_download_links_for_user(_user : str, include_hidden : bool) -> [str]:
+def get_download_links_for_user(_user : str, _include_hidden : bool) -> [str]:
     print('Retrieving album links from user [{}]\'s collection.'.format(_user))
 
     soup = BeautifulSoup(
@@ -218,7 +218,7 @@ def get_download_links_for_user(_user : str, include_hidden : bool) -> [str]:
     # the list... but this is a little uncomfortable to rely on, so let's divide
     # them up by explicitly checking item_cache.
     items = list(data['item_cache']['collection'].values())
-    if include_hidden:
+    if _include_hidden:
         items.extend(data['item_cache']['hidden'].values())
     item_keys = [str(item['sale_item_type']) + str(item['sale_item_id'])
                  for item in items
@@ -235,7 +235,7 @@ def get_download_links_for_user(_user : str, include_hidden : bool) -> [str]:
         # count is the number we have left to fetch after the initial data blob
         data['collection_data']['item_count'] - len(data['item_cache']['collection'])))
     
-    if include_hidden:
+    if _include_hidden:
         download_urls.extend(fetch_items(
             HIDDEN_POST_URL,
             user_id,
