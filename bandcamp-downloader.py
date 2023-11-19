@@ -31,7 +31,6 @@ CONFIG = {
     'BROWSER' : None,
     'FORMAT' : None,
     'FORCE' : False,
-    'INCLUDE_HIDDEN': False,
     'TQDM' : None,
     'MAX_URL_ATTEMPTS' : 5,
     'URL_RETRY_WAIT' : 5,
@@ -127,8 +126,13 @@ def main() -> int:
         default = False,
         help = 'Don\'t actually download files, just process all the web data and report what would have been done.',
     )
+    parser.add_argument(
+        '--include-hidden',
+        action='store_true',
+        default=False,
+        help = 'Download items in your collection that have been marked as hidden.',
+    )
     parser.add_argument('--verbose', '-v', action='count', default = 0)
-    parser.add_argument('--include-hidden', action='store_true', default=False)
     args = parser.parse_args()
 
     if args.parallel_downloads < 1 or args.parallel_downloads > MAX_THREADS:
@@ -136,7 +140,6 @@ def main() -> int:
 
     CONFIG['COOKIES'] = args.cookies
     CONFIG['VERBOSE'] = args.verbose
-    CONFIG['INCLUDE_HIDDEN'] = args.include_hidden
     CONFIG['OUTPUT_DIR'] = os.path.normcase(args.directory)
     CONFIG['FILENAME_FORMAT'] = args.filename_format
     CONFIG['BROWSER'] = args.browser
@@ -157,7 +160,7 @@ def main() -> int:
     if CONFIG['VERBOSE']: print(args)
     if CONFIG['FORCE']: print('WARNING: --force flag set, existing files will be overwritten.')
 
-    links = get_download_links_for_user(args.username, CONFIG['INCLUDE_HIDDEN'])
+    links = get_download_links_for_user(args.username, args.include_hidden)
     if CONFIG['VERBOSE']: print('Found [{}] links for [{}]\'s collection.'.format(len(links), args.username))
     if not links:
         print('WARN: No album links found for user [{}]. Are you logged in and have you selected the correct browser to pull cookies from?'.format(args.username))
