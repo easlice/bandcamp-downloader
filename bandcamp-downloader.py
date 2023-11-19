@@ -21,6 +21,7 @@ from tqdm import tqdm
 
 USER_URL = 'https://bandcamp.com/{}'
 COLLECTION_POST_URL = 'https://bandcamp.com/api/fancollection/1/collection_items'
+HIDDEN_POST_URL = 'https://bandcamp.com/api/fancollection/1/hidden_items'
 FILENAME_REGEX = re.compile('filename\\*=UTF-8\'\'(.*)')
 WINDOWS_DRIVE_REGEX = re.compile(r'[a-zA-Z]:\\')
 SANATIZE_PATH_WINDOWS_REGEX = re.compile(r'[<>:"/|?*\\]')
@@ -30,6 +31,7 @@ CONFIG = {
     'BROWSER' : None,
     'FORMAT' : None,
     'FORCE' : False,
+    'INCLUDE_HIDDEN': False,
     'TQDM' : None,
     'MAX_URL_ATTEMPTS' : 5,
     'URL_RETRY_WAIT' : 5,
@@ -126,6 +128,7 @@ def main() -> int:
         help = 'Don\'t actually download files, just process all the web data and report what would have been done.',
     )
     parser.add_argument('--verbose', '-v', action='count', default = 0)
+    parser.add_argument('--include-hidden', '-h', action='store_true', default=False)
     args = parser.parse_args()
 
     if args.parallel_downloads < 1 or args.parallel_downloads > MAX_THREADS:
@@ -133,6 +136,7 @@ def main() -> int:
 
     CONFIG['COOKIES'] = args.cookies
     CONFIG['VERBOSE'] = args.verbose
+    CONFIG['INCLUDE_HIDDEN'] = args.include_hidden
     CONFIG['OUTPUT_DIR'] = os.path.normcase(args.directory)
     CONFIG['FILENAME_FORMAT'] = args.filename_format
     CONFIG['BROWSER'] = args.browser
