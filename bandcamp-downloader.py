@@ -128,7 +128,7 @@ def main() -> int:
         help = 'Don\'t actually download files, just process all the web data and report what would have been done.',
     )
     parser.add_argument('--verbose', '-v', action='count', default = 0)
-    parser.add_argument('--include-hidden', '-h', action='store_true', default=False)
+    parser.add_argument('--include-hidden', action='store_true', default=False)
     args = parser.parse_args()
 
     if args.parallel_downloads < 1 or args.parallel_downloads > MAX_THREADS:
@@ -157,7 +157,7 @@ def main() -> int:
     if CONFIG['VERBOSE']: print(args)
     if CONFIG['FORCE']: print('WARNING: --force flag set, existing files will be overwritten.')
 
-    links = get_download_links_for_user(args.username)
+    links = get_download_links_for_user(args.username, CONFIG['INCLUDE_HIDDEN'])
     if CONFIG['VERBOSE']: print('Found [{}] links for [{}]\'s collection.'.format(len(links), args.username))
     if not links:
         print('WARN: No album links found for user [{}]. Are you logged in and have you selected the correct browser to pull cookies from?'.format(args.username))
@@ -174,40 +174,7 @@ def main() -> int:
     CONFIG['TQDM'].close()
     print('Done.')
 
-def generate_collection_post_payload(_user_info : dict) -> None:
-    # The number of items we still need is:
-    #   _user_info['collection_count'] - len(_user_info['download_urls']
-    # Unfortunately this post request returns hidden items, which will
-    # count against our request length but will not give us one of the
-    # download urls we need.
-    # Because of this we make count somewhat higher than our real target,
-    # and check more_available in the response in case it still isn't enough.
-    count = _user_info['collection_count'] - len(_user_info['download_urls']) + 50
-    return {
-        'fan_id' : _user_info['user_id'],
-        'count' : _user_info['collection_count'] - len(_user_info['download_urls']),
-        'older_than_token' : _user_info['last_token'],
-    }
-
-def get_user_collection(_user_info : dict) -> None:
-    #last_token = "{}::a::".format(int(time.time()))
-    # start with the last token from the initial page of results
-    last_token = _user_info['last_token']
-    more_available = True
-    while more_available:
-        payload = generate_collection_post_payload(_user_info, last_token)
-        with requests.post(
-            COLLECTION_POST_URL,
-            data = json.dumps(payload),
-            cookies = get_cookies(),
-        ) as response:
-            response.raise_for_status()
-            data = json.loads(response.text)
-            _user_info['download_urls'] += data['redownload_urls'].values()
-            last_token = data['last_token']
-            more_available = data['more_available']
-
-def get_download_links_for_user(_user : str) -> [str]:
+def get_download_links_for_user(_user : str, include_hidden : bool) -> [str]:
     print('Retrieving album links from user [{}]\'s collection.'.format(_user))
 
     soup = BeautifulSoup(
@@ -229,33 +196,53 @@ def get_download_links_for_user(_user : str) -> [str]:
         ))
         exit(2)
 
-    redownload = data['collection_data']['redownload_urls']
-    keys = redownload.keys()
-    values = [redownload[key] for key in keys]
+    # The collection_data.redownload_urls includes links for both hidden and
+    # unhidden items. The unhidden items all appear before the hidden items in
+    # the raw json response, so in python 3.7+ we can probably expect that this
+    # ordering carries through to the keys of redownload_urls and just truncate
+    # the list... but this is a little uncomfortable to rely on, so let's divide
+    # them up by explicitly checking item_cache.
+    items = list(data['item_cache']['collection'].values())
+    if include_hidden:
+        items.extend(data['item_cache']['hidden'].values())
+    item_keys = [str(item['sale_item_type']) + str(item['sale_item_id'])
+                 for item in items
+                 if 'sale_item_type' in item and 'sale_item_id' in item]
+    all_urls = data['collection_data']['redownload_urls']
+    download_urls = [all_urls[key] for key in item_keys if key in all_urls]
 
-    print(values)
-    exit(1)
-    #data['hidden_data']['last_token']
+    user_id = data['fan_data']['fan_id']
 
-    user_info = {
-        'user_id' : data['fan_data']['fan_id'],
-        'collection' : {
-            'download_urls' : data['collection_data']['redownload_urls'].values(),
-            'count' : data['collection_count'] - len(data['item_cache']['collection']),
-            'last_token' : data['collection_data']['last_token']
-        },
-        'hidden' : {
-            'download_urls' : data['hidden_data']['download_urls'].values(),
-            'count' : data['hidden_count'] - len(data['item_cache']['hidden']),
-            'last_token' : data['hidden_data']['last_token']
-        }
+    download_urls.extend(fetch_items(
+        COLLECTION_POST_URL,
+        user_id,
+        data['collection_data']['last_token'],
+        # count is the number we have left to fetch after the initial data blob
+        data['collection_data']['item_count'] - len(data['item_cache']['collection'])))
+    
+    if include_hidden:
+        download_urls.extend(fetch_items(
+            HIDDEN_POST_URL,
+            user_id,
+            data['hidden_data']['last_token'],
+            data['hidden_data']['item_count'] - len(data['item_cache']['hidden'])))
+        
+    return download_urls
+
+def fetch_items(_url : str, _user_id : str, _last_token : str, _count : int) -> [str]:
+    payload = {
+        'fan_id' : _user_id,
+        'count' : _count,
+        'older_than_token' : _last_token,
     }
-    #user_info['download_urls'] = [ *data['collection_data']['redownload_urls'].values() ]
-
-    print(f"{user_info}")
-    exit(1)
-    get_user_collection(user_info)
-    return user_info['download_urls']
+    with requests.post(
+        _url,
+        data = json.dumps(payload),
+        cookies = get_cookies(),
+    ) as response:
+        response.raise_for_status()
+        data = json.loads(response.text)
+        return data['redownload_urls'].values()
 
 def download_album(_album_url : str, _attempt : int = 1) -> None:
     try:
