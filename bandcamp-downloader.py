@@ -174,6 +174,21 @@ def main() -> int:
     CONFIG['TQDM'].close()
     print('Done.')
 
+def fetch_items(_url : str, _user_id : str, _last_token : str, _count : int) -> [str]:
+    payload = {
+        'fan_id' : _user_id,
+        'count' : _count,
+        'older_than_token' : _last_token,
+    }
+    with requests.post(
+        _url,
+        data = json.dumps(payload),
+        cookies = get_cookies(),
+    ) as response:
+        response.raise_for_status()
+        data = json.loads(response.text)
+        return data['redownload_urls'].values()
+
 def get_download_links_for_user(_user : str, include_hidden : bool) -> [str]:
     print('Retrieving album links from user [{}]\'s collection.'.format(_user))
 
@@ -228,21 +243,6 @@ def get_download_links_for_user(_user : str, include_hidden : bool) -> [str]:
             data['hidden_data']['item_count'] - len(data['item_cache']['hidden'])))
         
     return download_urls
-
-def fetch_items(_url : str, _user_id : str, _last_token : str, _count : int) -> [str]:
-    payload = {
-        'fan_id' : _user_id,
-        'count' : _count,
-        'older_than_token' : _last_token,
-    }
-    with requests.post(
-        _url,
-        data = json.dumps(payload),
-        cookies = get_cookies(),
-    ) as response:
-        response.raise_for_status()
-        data = json.loads(response.text)
-        return data['redownload_urls'].values()
 
 def download_album(_album_url : str, _attempt : int = 1) -> None:
     try:
