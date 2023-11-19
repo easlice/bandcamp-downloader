@@ -9,6 +9,8 @@ Alternatively, you can use a [Netscape format cookies](https://curl.se/docs/http
 
 Albums will be downloaded into their zip files and singles will just be plain files. Downloads are organized by Artist name. Already existing files of the same name will have their file sizes checked against what it should be, and if they are the same, the download will be skipped, otherwise it will be over-written. You can use the `--force` flag to always overwrite existing files.
 
+By default the download only includes unhidden items in your collection. To include hidden items as well, use the `--include-hidden` flag.
+
 Downloads will happen in parallel, by default using a pool of 5 threads. You can configure how many threads to use with the `--parallel-downloads`/`-p` flag. After each download a thread will wait 1 second before trying the next download. This is to try and not overwhelm (and be rejected by) the bandcamp servers. This can be configured with the `--wait-after-download` flag.
 
 If a download should fail because of an HTTP/network error, it will be retried again after a short wait. By default a file download will be attempted at most 5 times. This can be configured with the `--max-download-attempts` flag. By default, a failed download will wait 5 seconds before trying again. This can be configured by the `--retry-wait` flag.
