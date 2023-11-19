@@ -225,13 +225,31 @@ def get_download_links_for_user(_user : str) -> [str]:
         ))
         exit(2)
 
-    user_info = {
-        'collection_count' : data['collection_count'],
-        'user_id' : data['fan_data']['fan_id'],
-        'last_token' : data['collection_data']['last_token'],
-    }
-    user_info['download_urls'] = [ *data['collection_data']['redownload_urls'].values() ]
+    redownload = data['collection_data']['redownload_urls']
+    keys = redownload.keys()
+    values = [redownload[key] for key in keys]
 
+    print(values)
+    exit(1)
+    #data['hidden_data']['last_token']
+
+    user_info = {
+        'user_id' : data['fan_data']['fan_id'],
+        'collection' : {
+            'download_urls' : data['collection_data']['redownload_urls'].values(),
+            'count' : data['collection_count'] - len(data['item_cache']['collection']),
+            'last_token' : data['collection_data']['last_token']
+        },
+        'hidden' : {
+            'download_urls' : data['hidden_data']['download_urls'].values(),
+            'count' : data['hidden_count'] - len(data['item_cache']['hidden']),
+            'last_token' : data['hidden_data']['last_token']
+        }
+    }
+    #user_info['download_urls'] = [ *data['collection_data']['redownload_urls'].values() ]
+
+    print(f"{user_info}")
+    exit(1)
     get_user_collection(user_info)
     return user_info['download_urls']
 
