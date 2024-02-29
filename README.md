@@ -84,7 +84,11 @@ usage: bandcamp-downloader.py [-h]
                               [--force]
                               [--wait-after-download WAIT_AFTER_DOWNLOAD]
                               [--max-download-attempts MAX_DOWNLOAD_ATTEMPTS]
-                              [--retry-wait RETRY_WAIT] [--verbose]
+                              [--retry-wait RETRY_WAIT]
+                              [--include-hidden]
+                              [--download-since DOWNLOAD_SINCE]
+                              [--dry-run]
+                              [--verbose] [-v]
                               username
 
 Download your collection from bandcamp. Requires a logged in session in a
@@ -132,6 +136,12 @@ optional arguments:
                         How long, in seconds, to wait before trying to
                         download a file again after a failure. Defaults to
                         '5'.
+  --include-hidden      Download items in your collection that have been marked as hidden.
+  --download-since DOWNLOAD_SINCE
+                        Only download items purchased on or after the given date.
+                        YYYY-MM-DD format, defaults to all items.
+  --dry-run             Don't actually download files, just process all the web data
+                        and report what would have been done.
   --verbose, -v
 ```
 
