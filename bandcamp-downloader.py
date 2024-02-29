@@ -22,6 +22,7 @@ from tqdm import tqdm
 
 USER_URL = 'https://bandcamp.com/{}'
 COLLECTION_POST_URL = 'https://bandcamp.com/api/fancollection/1/collection_items'
+HIDDEN_POST_URL = 'https://bandcamp.com/api/fancollection/1/hidden_items'
 FILENAME_REGEX = re.compile('filename\\*=UTF-8\'\'(.*)')
 WINDOWS_DRIVE_REGEX = re.compile(r'[a-zA-Z]:\\')
 SANATIZE_PATH_WINDOWS_REGEX = re.compile(r'[<>:"/|?*\\]')
@@ -121,6 +122,12 @@ def main() -> int:
         help = 'How long, in seconds, to wait before trying to download a file again after a failure. Defaults to \'5\'.',
     )
     parser.add_argument(
+        '--include-hidden',
+        action='store_true',
+        default=False,
+        help = 'Download items in your collection that have been marked as hidden.',
+    )
+    parser.add_argument(
         '--download-since',
         default = '',
         help = 'Only download items purchased on or after the given date. YYYY-MM-DD format, defaults to all items.'
@@ -163,7 +170,7 @@ def main() -> int:
     if CONFIG['VERBOSE']: print(args)
     if CONFIG['FORCE']: print('WARNING: --force flag set, existing files will be overwritten.')
 
-    links = get_download_links_for_user(args.username, CONFIG['SINCE'])
+    links = get_download_links_for_user(args.username, args.include_hidden, CONFIG['SINCE'])
     if CONFIG['VERBOSE']: print('Found [{}] links for [{}]\'s collection.'.format(len(links), args.username))
     if not links:
         if CONFIG['SINCE'] is None:
@@ -183,32 +190,42 @@ def main() -> int:
     CONFIG['TQDM'].close()
     print('Done.')
 
-def generate_collection_post_payload(_user_info : dict) -> None:
-    return {
-        'fan_id' : _user_info['user_id'],
-        'count' : _user_info['collection_count'] - len(_user_info['download_urls']),
-        'older_than_token' : _user_info['last_token'],
-    }
+def filter_by_purchase_time(items : [dict], _since : datetime.datetime) -> [dict]:
+    good = []
+    for item in items:
+        purchaseTime = datetime.datetime.strptime(item['purchased'], '%d %b %Y %H:%M:%S GMT')
+        if purchaseTime >= _since:
+            good.append(item)
+    return good
 
-def get_user_collection(_user_info : dict, _since : datetime.datetime) -> None:
+def fetch_items(_url : str, _user_id : str, _last_token : str, _count : int, _since : datetime.datetime) -> [str]:
+    payload = {
+        'fan_id' : _user_id,
+        'count' : _count,
+        'older_than_token' : _last_token,
+    }
     with requests.post(
-        COLLECTION_POST_URL,
-        data = json.dumps(generate_collection_post_payload(_user_info)),
+        _url,
+        data = json.dumps(payload),
         cookies = get_cookies(),
     ) as response:
         response.raise_for_status()
         data = json.loads(response.text)
-        if _since is None:
-            _user_info['download_urls'] += data['redownload_urls'].values()
-            return
-        for item in data['items']:
-            purchaseTime = datetime.datetime.strptime(item['purchased'], '%d %b %Y %H:%M:%S GMT')
-            if purchaseTime >= _since:
-                item_id = str(item['sale_item_id'])
-                item_type = item['sale_item_type']
-                _user_info['download_urls'].append(data['redownload_urls'][item_type+item_id])
 
-def get_download_links_for_user(_user : str, _since : datetime.datetime) -> [str]:
+        # There might be no data, for example calling `--include-hidden` with no hidden items
+        if 'redownload_urls' not in data:
+            return []
+
+        if _since is None:
+            return data['redownload_urls'].values()
+        items = []
+        for item in filter_by_purchase_time(data['items'], _since):
+            item_id = str(item['sale_item_id'])
+            item_type = item['sale_item_type']
+            items.append(data['redownload_urls'][item_type+item_id])
+        return items
+
+def get_download_links_for_user(_user : str, _include_hidden : bool, _since : datetime.datetime) -> [str]:
     print('Retrieving album links from user [{}]\'s collection.'.format(_user))
 
     soup = BeautifulSoup(
@@ -230,18 +247,42 @@ def get_download_links_for_user(_user : str, _since : datetime.datetime) -> [str
         ))
         exit(2)
 
-    user_info = {
-        'collection_count' : data['collection_count'],
-        'user_id' : data['fan_data']['fan_id'],
-        'last_token' : data['collection_data']['last_token'],
-    }
-    # This may download files outside the _since time, but the API does not
-    # return purchase times for these items and they are not included in the
-    # other query.
-    user_info['download_urls'] = [ *data['collection_data']['redownload_urls'].values() ]
+    # The collection_data.redownload_urls includes links for both hidden and
+    # unhidden items. The unhidden items all appear before the hidden items in
+    # the raw json response, so in python 3.7+ we can probably expect that this
+    # ordering carries through to the keys of redownload_urls and just truncate
+    # the list... but this is a little uncomfortable to rely on, so let's divide
+    # them up by explicitly checking item_cache.
+    items = list(data['item_cache']['collection'].values())
+    if _include_hidden:
+        items.extend(data['item_cache']['hidden'].values())
+    if _since:
+        items = filter_by_purchase_time(items, _since)
+    item_keys = [str(item['sale_item_type']) + str(item['sale_item_id'])
+                 for item in items
+                 if 'sale_item_type' in item and 'sale_item_id' in item]
+    all_urls = data['collection_data']['redownload_urls']
+    download_urls = [all_urls[key] for key in item_keys if key in all_urls]
 
-    get_user_collection(user_info, _since)
-    return user_info['download_urls']
+    user_id = data['fan_data']['fan_id']
+
+    download_urls.extend(fetch_items(
+        COLLECTION_POST_URL,
+        user_id,
+        data['collection_data']['last_token'],
+        # count is the number we have left to fetch after the initial data blob
+        data['collection_data']['item_count'] - len(data['item_cache']['collection']),
+        _since))
+
+    if _include_hidden:
+        download_urls.extend(fetch_items(
+            HIDDEN_POST_URL,
+            user_id,
+            data['hidden_data']['last_token'],
+            data['hidden_data']['item_count'] - len(data['item_cache']['hidden']),
+            _since))
+
+    return download_urls
 
 def download_album(_album_url : str, _attempt : int = 1) -> None:
     try:
