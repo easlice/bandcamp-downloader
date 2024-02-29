@@ -15,7 +15,7 @@ import traceback
 from concurrent.futures import ThreadPoolExecutor
 
 # These require pip installs
-from bs4 import BeautifulSoup, SoupStrainer
+from beautifulsoup4 import BeautifulSoup, SoupStrainer
 import requests
 import browser_cookie3
 from tqdm import tqdm
