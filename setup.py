@@ -60,7 +60,7 @@ setup(
     #
     # For an analysis of "install_requires" vs pip's requirements files see:
     # https://packaging.python.org/discussions/install-requires-vs-requirements/
-    install_requires=["bs4", "browser_cookie3", "requests", "tqdm"],  # Optional
+    install_requires=["beautifulsoup4", "browser_cookie3", "requests", "tqdm"],  # Optional
     # List additional URLs that are relevant to your project as a dict.
     #
     # This field corresponds to the "Project-URL" metadata fields:

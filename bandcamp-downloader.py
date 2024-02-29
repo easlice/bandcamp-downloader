@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+import datetime
 import html
 import http
 import json
@@ -14,7 +15,7 @@ import traceback
 from concurrent.futures import ThreadPoolExecutor
 
 # These require pip installs
-from bs4 import BeautifulSoup, SoupStrainer
+from beautifulsoup4 import BeautifulSoup, SoupStrainer
 import requests
 import browser_cookie3
 from tqdm import tqdm
@@ -121,6 +122,11 @@ def main() -> int:
         help = 'How long, in seconds, to wait before trying to download a file again after a failure. Defaults to \'5\'.',
     )
     parser.add_argument(
+        '--download-since',
+        default = '',
+        help = 'Only download items purchased on or after the given date. YYYY-MM-DD format, defaults to all items.'
+    )
+    parser.add_argument(
         '--dry-run',
         action = 'store_true',
         default = False,
@@ -143,6 +149,10 @@ def main() -> int:
     CONFIG['OUTPUT_DIR'] = os.path.normcase(args.directory)
     CONFIG['FILENAME_FORMAT'] = args.filename_format
     CONFIG['BROWSER'] = args.browser
+    if args.download_since:
+        CONFIG['SINCE'] = datetime.datetime.strptime(args.download_since, '%Y-%m-%d')
+    else:
+        CONFIG['SINCE'] = None
     CONFIG['FORMAT'] = args.format
     CONFIG['FORCE'] = args.force
     CONFIG['DRY_RUN'] = args.dry_run
@@ -160,10 +170,13 @@ def main() -> int:
     if CONFIG['VERBOSE']: print(args)
     if CONFIG['FORCE']: print('WARNING: --force flag set, existing files will be overwritten.')
 
-    links = get_download_links_for_user(args.username, args.include_hidden)
+    links = get_download_links_for_user(args.username, args.include_hidden, CONFIG['SINCE'])
     if CONFIG['VERBOSE']: print('Found [{}] links for [{}]\'s collection.'.format(len(links), args.username))
     if not links:
-        print('WARN: No album links found for user [{}]. Are you logged in and have you selected the correct browser to pull cookies from?'.format(args.username))
+        if CONFIG['SINCE'] is None:
+            print('WARN: No album links found for user [{}]. Are you logged in and have you selected the correct browser to pull cookies from?'.format(args.username))
+        else:
+            print('WARN: No album links found for user [{}] since [{}]. Are you logged in and have you selected the correct browser to pull cookies from, and is the specified time old enough?'.format(args.username, args.download_since))
         sys.exit(2)
 
     print('Starting album downloads...')
@@ -177,7 +190,7 @@ def main() -> int:
     CONFIG['TQDM'].close()
     print('Done.')
 
-def fetch_items(_url : str, _user_id : str, _last_token : str, _count : int) -> [str]:
+def fetch_items(_url : str, _user_id : str, _last_token : str, _count : int, _since : datetime.datetime) -> [str]:
     payload = {
         'fan_id' : _user_id,
         'count' : _count,
@@ -190,9 +203,26 @@ def fetch_items(_url : str, _user_id : str, _last_token : str, _count : int) -> 
     ) as response:
         response.raise_for_status()
         data = json.loads(response.text)
-        return data['redownload_urls'].values()
 
-def get_download_links_for_user(_user : str, _include_hidden : bool) -> [str]:
+        if _since is None:
+            return data['redownload_urls'].values()
+
+        items = []
+        for item in filter_by_purchase_time(data['items'], _since):
+            item_id = str(item['sale_item_id'])
+            item_type = item['sale_item_type']
+            items.append(data['redownload_urls'][item_type+item_id])
+        return items
+
+def filter_by_purchase_time(items : [dict], _since : datetime.datetime) -> [dict]:
+    good = []
+    for item in items:
+        purchaseTime = datetime.datetime.strptime(item['purchased'], '%d %b %Y %H:%M:%S GMT')
+        if purchaseTime >= _since:
+            good.append(item)
+    return good
+    
+def get_download_links_for_user(_user : str, _include_hidden : bool, _since : datetime.datetime) -> [str]:
     print('Retrieving album links from user [{}]\'s collection.'.format(_user))
 
     soup = BeautifulSoup(
@@ -223,6 +253,8 @@ def get_download_links_for_user(_user : str, _include_hidden : bool) -> [str]:
     items = list(data['item_cache']['collection'].values())
     if _include_hidden:
         items.extend(data['item_cache']['hidden'].values())
+    if _since:
+        items = filter_by_purchase_time(items, _since)
     item_keys = [str(item['sale_item_type']) + str(item['sale_item_id'])
                  for item in items
                  if 'sale_item_type' in item and 'sale_item_id' in item]
@@ -237,14 +269,14 @@ def get_download_links_for_user(_user : str, _include_hidden : bool) -> [str]:
         data['collection_data']['last_token'],
         # count is the number we have left to fetch after the initial data blob
         data['collection_data']['item_count'] - len(data['item_cache']['collection'])))
-    
+
     if _include_hidden:
         download_urls.extend(fetch_items(
             HIDDEN_POST_URL,
             user_id,
             data['hidden_data']['last_token'],
             data['hidden_data']['item_count'] - len(data['item_cache']['hidden'])))
-        
+
     return download_urls
 
 def download_album(_album_url : str, _attempt : int = 1) -> None:
