@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+import datetime
 import html
 import http
 import json
@@ -120,6 +121,11 @@ def main() -> int:
         help = 'How long, in seconds, to wait before trying to download a file again after a failure. Defaults to \'5\'.',
     )
     parser.add_argument(
+        '--download-since',
+        default = '',
+        help = 'Only download items purchased on or after the given date. YYYY-MM-DD format, defaults to all items.'
+    )
+    parser.add_argument(
         '--dry-run',
         action = 'store_true',
         default = False,
@@ -136,6 +142,10 @@ def main() -> int:
     CONFIG['OUTPUT_DIR'] = os.path.normcase(args.directory)
     CONFIG['FILENAME_FORMAT'] = args.filename_format
     CONFIG['BROWSER'] = args.browser
+    if args.download_since:
+        CONFIG['SINCE'] = datetime.datetime.strptime(args.download_since, '%Y-%m-%d')
+    else:
+        CONFIG['SINCE'] = None
     CONFIG['FORMAT'] = args.format
     CONFIG['FORCE'] = args.force
     CONFIG['DRY_RUN'] = args.dry_run
@@ -153,10 +163,13 @@ def main() -> int:
     if CONFIG['VERBOSE']: print(args)
     if CONFIG['FORCE']: print('WARNING: --force flag set, existing files will be overwritten.')
 
-    links = get_download_links_for_user(args.username)
+    links = get_download_links_for_user(args.username, CONFIG['SINCE'])
     if CONFIG['VERBOSE']: print('Found [{}] links for [{}]\'s collection.'.format(len(links), args.username))
     if not links:
-        print('WARN: No album links found for user [{}]. Are you logged in and have you selected the correct browser to pull cookies from?'.format(args.username))
+        if CONFIG['SINCE'] is None:
+            print('WARN: No album links found for user [{}]. Are you logged in and have you selected the correct browser to pull cookies from?'.format(args.username))
+        else:
+            print('WARN: No album links found for user [{}] since [{}]. Are you logged in and have you selected the correct browser to pull cookies from, and is the specified time old enough?'.format(args.username, args.download_since))
         sys.exit(2)
 
     print('Starting album downloads...')
@@ -177,7 +190,7 @@ def generate_collection_post_payload(_user_info : dict) -> None:
         'older_than_token' : _user_info['last_token'],
     }
 
-def get_user_collection(_user_info : dict) -> None:
+def get_user_collection(_user_info : dict, _since : datetime.datetime) -> None:
     with requests.post(
         COLLECTION_POST_URL,
         data = json.dumps(generate_collection_post_payload(_user_info)),
@@ -185,9 +198,17 @@ def get_user_collection(_user_info : dict) -> None:
     ) as response:
         response.raise_for_status()
         data = json.loads(response.text)
-        _user_info['download_urls'] += data['redownload_urls'].values()
+        if _since is None:
+            _user_info['download_urls'] += data['redownload_urls'].values()
+            return
+        for item in data['items']:
+            purchaseTime = datetime.datetime.strptime(item['purchased'], '%d %b %Y %H:%M:%S GMT')
+            if purchaseTime >= _since:
+                item_id = str(item['sale_item_id'])
+                item_type = item['sale_item_type']
+                _user_info['download_urls'].append(data['redownload_urls'][item_type+item_id])
 
-def get_download_links_for_user(_user : str) -> [str]:
+def get_download_links_for_user(_user : str, _since : datetime.datetime) -> [str]:
     print('Retrieving album links from user [{}]\'s collection.'.format(_user))
 
     soup = BeautifulSoup(
@@ -214,9 +235,12 @@ def get_download_links_for_user(_user : str) -> [str]:
         'user_id' : data['fan_data']['fan_id'],
         'last_token' : data['collection_data']['last_token'],
     }
+    # This may download files outside the _since time, but the API does not
+    # return purchase times for these items and they are not included in the
+    # other query.
     user_info['download_urls'] = [ *data['collection_data']['redownload_urls'].values() ]
 
-    get_user_collection(user_info)
+    get_user_collection(user_info, _since)
     return user_info['download_urls']
 
 def download_album(_album_url : str, _attempt : int = 1) -> None:
