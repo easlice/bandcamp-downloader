@@ -1,6 +1,5 @@
 beautifulsoup4==4.12.2
 browser-cookie3==0.14.3
-bs4==0.0.1
 certifi==2023.7.22
 cffi==1.15.1
 charset-normalizer==3.2.0
