@@ -31,6 +31,16 @@ Please either check your WSL dbus installation/configuration, or run the script 
 
 There is currently an issue with [browser_cookie3](https://github.com/borisbabic/browser_cookie3). This has been reported within this repo [here](https://github.com/easlice/bandcamp-downloader/issues/17) and you can see the status of it upstream [here](https://github.com/borisbabic/browser_cookie3/issues/141).
 
+### "Failed to find <browser> cookie" even though you have the browser installed and are logged in.
+
+Sometimes a browser does not put its files in the expected location. This is especially true if the browser is installed as a flatpack or snap. As such, browser_cookie3 doesn't know where to look for the cookie store.
+
+You can fix this by using the `--cookies` flag and giving it the path to your browser's cookie store, usually a file named something like `Cookies` or `cookies.sqlite`. Note: You still need to give the correct `--browser` flag.
+
+Another option is to symlink the directory to the correct place. For example, the package `chromium-bin` often installs to the directory `~/.chromium-bin` but as it is expected to be at `~.chromium`. You can run:
+`symlink -s ~/.chromium-bin ~/.chromium`
+and then browser_cookie3 will be able to find the cookies as expected and you will not need to use the `--cookies` flag.
+
 ## Manual Setup
 
 Install the script dependencies by running:
@@ -158,8 +168,6 @@ When modifying required packages, please:
 ## Notes
 
 If you have a logged in session in the browser, have used the `--browser`/`-b` flag correctly, and still are being told that the script isn't finding any albums, check out the page for [browser_cookie3](https://github.com/borisbabic/browser_cookie3), you might need to do some configuring in your browser to make the cookies available to the script.
-
-Similarly, if you have installed your browser via a flatpack the cookies will not be in the default location. You can work around this by either using `--cookies` to specify the path or create a symlink to where the browser would normally have its config directory be.
 
 If you are downloading your collection in multiple formats, the script can't tell if an already downloaded zip file is the same format or not, and will happily overwrite it. So make sure to use different directories for different formats, either by running the script somewhere else or by supplying directories to the `--directory`/`-d` flag.
 
