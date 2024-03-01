@@ -70,9 +70,13 @@ def main() -> int:
         type=str,
         default = 'firefox',
         choices = SUPPORTED_BROWSERS,
-        help='The browser whose cookies to use for accessing bandcamp. Defaults to "firefox". Use with --cookies to specifiy the path.'
+        help='The browser whose cookies to use for accessing bandcamp. Defaults to "firefox"'
     )
-    parser.add_argument('--cookies', type=str, help='Path to cookies.txt. When used with browser, that browsers format will be used for parsing.')
+    parser.add_argument(
+        '--cookies', '-c',
+        type=str,
+        help='Path to a cookie file. First, we will try to use it as a mozilla cookie jar. If that fails, it\'ll be used as the path for your given browser\'s cookie store.',
+    )
     parser.add_argument(
         '--directory', '-d',
         default = os.getcwd(),
@@ -152,6 +156,7 @@ def main() -> int:
 
     if CONFIG['VERBOSE']: print(args)
     if CONFIG['FORCE']: print('WARNING: --force flag set, existing files will be overwritten.')
+    CONFIG['COOKIE_JAR'] = get_cookies()
 
     links = get_download_links_for_user(args.username)
     if CONFIG['VERBOSE']: print('Found [{}] links for [{}]\'s collection.'.format(len(links), args.username))
@@ -181,7 +186,7 @@ def get_user_collection(_user_info : dict) -> None:
     with requests.post(
         COLLECTION_POST_URL,
         data = json.dumps(generate_collection_post_payload(_user_info)),
-        cookies = get_cookies(),
+        cookies = CONFIG['COOKIE_JAR'],
     ) as response:
         response.raise_for_status()
         data = json.loads(response.text)
@@ -193,7 +198,7 @@ def get_download_links_for_user(_user : str) -> [str]:
     soup = BeautifulSoup(
         requests.get(
             USER_URL.format(_user),
-            cookies = get_cookies()
+            cookies = CONFIG['COOKIE_JAR']
         ).text,
         'html.parser',
         parse_only = SoupStrainer('div', id='pagedata'),
@@ -225,7 +230,7 @@ def download_album(_album_url : str, _attempt : int = 1) -> None:
         soup = BeautifulSoup(
             requests.get(
                 _album_url,
-                cookies = get_cookies()
+                cookies = CONFIG['COOKIE_JAR']
             ).text,
             'html.parser',
             parse_only = SoupStrainer('div', id='pagedata'),
@@ -268,7 +273,7 @@ def download_file(_url : str, _track_info : dict = None, _attempt : int = 1) -> 
     try:
         with requests.get(
                 _url,
-                cookies = get_cookies(),
+                cookies = CONFIG['COOKIE_JAR'],
                 stream = True,
         ) as response:
             response.raise_for_status()
@@ -339,18 +344,25 @@ def sanitize_filename(_path : str) -> str:
         return _path.replace('/', '-')
 
 def get_cookies():
-
-    if CONFIG['BROWSER']:
+    if CONFIG['COOKIES']:
+        # First try it as a mozilla cookie jar
+        try:
+            cj = http.cookiejar.MozillaCookieJar(CONFIG['COOKIES'])
+            cj.load()
+            return cj
+        except Exception as e:
+            if CONFIG['VERBOSE'] >=2: print(f"Cookie file at [{CONFIG['COOKIES']}] not a mozilla cookie jar.\nTrying it as a cookie store for the browser [{CONFIG['BROWSER']}]...")
+        # Next try it with browser_cookie
         try:
             func = getattr(browser_cookie3, CONFIG['BROWSER'])
             return func(domain_name = 'bandcamp.com', cookie_file = CONFIG['COOKIES'])
         except AttributeError:
             raise Exception('Browser type [{}] is unknown. Can\'t pull cookies, so can\'t authenticate with bandcamp.'.format(CONFIG['BROWSER']))
-
-    if CONFIG['COOKIES']:
-        cj = http.cookiejar.MozillaCookieJar(CONFIG['COOKIES'])
-        cj.load()
-        return cj
+    try:
+        func = getattr(browser_cookie3, CONFIG['BROWSER'])
+        return func(domain_name = 'bandcamp.com')
+    except AttributeError:
+        raise Exception('Browser type [{}] is unknown. Can\'t pull cookies, so can\'t authenticate with bandcamp.'.format(CONFIG['BROWSER']))
 
 if __name__ == '__main__':
     sys.exit(main())
