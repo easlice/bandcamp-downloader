@@ -1,4 +1,4 @@
-# bandcamp-downloader
+# bandcamp-downloader [![Python package](https://github.com/easlice/bandcamp-downloader/actions/workflows/python-package.yml/badge.svg)](https://github.com/easlice/bandcamp-downloader/actions/workflows/python-package.yml)
 Download your Bandcamp collection using this python script.
 
 It requires you to have a browser with a logged in session of bandcamp open. Cookies from the browser will be used to authenticate with Bandcamp.
@@ -37,7 +37,7 @@ Sometimes a browser does not put its files in the expected location. This is esp
 
 You can fix this by using the `--cookies` flag and giving it the path to your browser's cookie store, usually a file named something like `Cookies` or `cookies.sqlite`. Note: You still need to give the correct `--browser` flag.
 
-Another option is to symlink the directory to the correct place. For example, the package `chromium-bin` often installs to the directory `~/.chromium-bin` but as it is expected to be at `~.chromium`. You can run:
+Another option is to symlink the directory to the correct place. For example, the package `chromium-bin` often installs to the directory `~/.chromium-bin` but it is expected to be at `~.chromium`. You can run:
 `symlink -s ~/.chromium-bin ~/.chromium`
 and then browser_cookie3 will be able to find the cookies as expected and you will not need to use the `--cookies` flag.
 
