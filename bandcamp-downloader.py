@@ -291,7 +291,6 @@ def get_download_links_for_user(_user : str, _include_hidden : bool, _since : da
 
 def download_album(_album_url : str, _attempt : int = 1) -> None:
     try:
-        return
         soup = BeautifulSoup(
             requests.get(
                 _album_url,
