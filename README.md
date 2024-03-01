@@ -76,7 +76,7 @@ poetry run python bandcamp-downloader.py [arguments]
 ```
 usage: bandcamp-downloader.py [-h]
                               [--browser {firefox,chrome,chromium,brave,opera,edge}]
-                              [--cookies /path/to/cookies.txt]
+                              [--cookies COOKIES]
                               [--directory DIRECTORY]
                               [--filename-format FILENAME_FORMAT]
                               [--format {aac-hi,aiff-lossless,alac,flac,mp3-320,mp3-v0,vorbis,wav}]
@@ -107,8 +107,10 @@ optional arguments:
   --browser {firefox,chrome,chromium,brave,opera,edge}, -b {firefox,chrome,chromium,brave,opera,edge}
                         The browser whose cookies to use for accessing
                         bandcamp. Defaults to "firefox"
-  --cookies PATH        Specifies a path to a Netscape/Mozilla format cookies file. Takes precedence
-                        over --browser option
+  --cookies COOKIES, -c COOKIES
+                        Path to a cookie file. First, we will try to use
+                        it as a mozilla cookie jar. If that fails, it'll
+                        be used as the path for your given browser's cookie store.
   --directory DIRECTORY, -d DIRECTORY
                         The directory to download albums to. Defaults to the
                         current directory.

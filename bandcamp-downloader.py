@@ -74,7 +74,11 @@ def main() -> int:
         choices = SUPPORTED_BROWSERS,
         help='The browser whose cookies to use for accessing bandcamp. Defaults to "firefox"'
     )
-    parser.add_argument('--cookies', type=str, help='Path to cookies.txt')
+    parser.add_argument(
+        '--cookies', '-c',
+        type=str,
+        help='Path to a cookie file. First, we will try to use it as a mozilla cookie jar. If that fails, it\'ll be used as the path for your given browser\'s cookie store.',
+    )
     parser.add_argument(
         '--directory', '-d',
         default = os.getcwd(),
@@ -169,6 +173,7 @@ def main() -> int:
 
     if CONFIG['VERBOSE']: print(args)
     if CONFIG['FORCE']: print('WARNING: --force flag set, existing files will be overwritten.')
+    CONFIG['COOKIE_JAR'] = get_cookies()
 
     links = get_download_links_for_user(args.username, args.include_hidden, CONFIG['SINCE'])
     if CONFIG['VERBOSE']: print('Found [{}] links for [{}]\'s collection.'.format(len(links), args.username))
@@ -207,7 +212,7 @@ def fetch_items(_url : str, _user_id : str, _last_token : str, _count : int, _si
     with requests.post(
         _url,
         data = json.dumps(payload),
-        cookies = get_cookies(),
+        cookies = CONFIG['COOKIE_JAR'],
     ) as response:
         response.raise_for_status()
         data = json.loads(response.text)
@@ -231,7 +236,7 @@ def get_download_links_for_user(_user : str, _include_hidden : bool, _since : da
     soup = BeautifulSoup(
         requests.get(
             USER_URL.format(_user),
-            cookies = get_cookies()
+            cookies = CONFIG['COOKIE_JAR']
         ).text,
         'html.parser',
         parse_only = SoupStrainer('div', id='pagedata'),
@@ -286,10 +291,11 @@ def get_download_links_for_user(_user : str, _include_hidden : bool, _since : da
 
 def download_album(_album_url : str, _attempt : int = 1) -> None:
     try:
+        return
         soup = BeautifulSoup(
             requests.get(
                 _album_url,
-                cookies = get_cookies()
+                cookies = CONFIG['COOKIE_JAR']
             ).text,
             'html.parser',
             parse_only = SoupStrainer('div', id='pagedata'),
@@ -332,7 +338,7 @@ def download_file(_url : str, _track_info : dict = None, _attempt : int = 1) -> 
     try:
         with requests.get(
                 _url,
-                cookies = get_cookies(),
+                cookies = CONFIG['COOKIE_JAR'],
                 stream = True,
         ) as response:
             response.raise_for_status()
@@ -404,10 +410,19 @@ def sanitize_filename(_path : str) -> str:
 
 def get_cookies():
     if CONFIG['COOKIES']:
-        cj = http.cookiejar.MozillaCookieJar(CONFIG['COOKIES'])
-        cj.load()
-        return cj
-
+        # First try it as a mozilla cookie jar
+        try:
+            cj = http.cookiejar.MozillaCookieJar(CONFIG['COOKIES'])
+            cj.load()
+            return cj
+        except Exception as e:
+            if CONFIG['VERBOSE'] >=2: print(f"Cookie file at [{CONFIG['COOKIES']}] not a mozilla cookie jar.\nTrying it as a cookie store for the browser [{CONFIG['BROWSER']}]...")
+        # Next try it with browser_cookie
+        try:
+            func = getattr(browser_cookie3, CONFIG['BROWSER'])
+            return func(domain_name = 'bandcamp.com', cookie_file = CONFIG['COOKIES'])
+        except AttributeError:
+            raise Exception('Browser type [{}] is unknown. Can\'t pull cookies, so can\'t authenticate with bandcamp.'.format(CONFIG['BROWSER']))
     try:
         func = getattr(browser_cookie3, CONFIG['BROWSER'])
         return func(domain_name = 'bandcamp.com')
