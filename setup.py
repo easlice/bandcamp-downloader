@@ -9,7 +9,7 @@ long_description = (here / "README.md").read_text(encoding="utf-8")
 
 setup(
     name="bandcamp-downloader",  # Required
-    version="0.1.1",  # Required
+    version="0.1.2",  # Required
     description="Download your collection from Bandcamp.",  # Optional
     long_description=long_description,  # Optional
     long_description_content_type="text/markdown",  # Optional (see note above)

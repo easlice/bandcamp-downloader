@@ -2,6 +2,7 @@
 
 import argparse
 import datetime
+import glob
 import html
 import http
 import json
@@ -11,6 +12,7 @@ import sys
 import time
 import urllib.parse
 import traceback
+import zipfile
 
 from concurrent.futures import ThreadPoolExecutor
 
@@ -137,6 +139,11 @@ def main() -> int:
         help = 'Only download items purchased on or after the given date. YYYY-MM-DD format, defaults to all items.'
     )
     parser.add_argument(
+        '--unzip',
+        action='store_true',
+        help='Unzip albums after downloading, deleting the zip file.'
+    )
+    parser.add_argument(
         '--dry-run',
         action = 'store_true',
         default = False,
@@ -160,6 +167,7 @@ def main() -> int:
     CONFIG['FORMAT'] = args.format
     CONFIG['FORCE'] = args.force
     CONFIG['DRY_RUN'] = args.dry_run
+    CONFIG['UNZIP'] = args.unzip
 
     if args.wait_after_download < 0:
         parser.error('--wait-after-download must be at least 0.')
@@ -193,6 +201,20 @@ def main() -> int:
         for link in links:
             download_album(link)
     CONFIG['TQDM'].close()
+
+    if args.unzip:
+        base_path = os.getcwd()
+        if args.directory:
+            base_path = args.directory
+        all_zip_files = glob.glob(f'{base_path}/**/*.zip', recursive=True)
+        for zip in all_zip_files:
+            print(f'unzipping: {zip}')
+            album_name = re.search(r'\- (.+?)\.zip$', zip).group(1)
+            extract_dir = os.path.join(os.path.dirname(zip), album_name)
+            with zipfile.ZipFile(zip, 'r') as zip_file:
+                zip_file.extractall(extract_dir)
+            os.remove(zip)
+
     print('Done.')
 
 def filter_by_purchase_time(items : [dict], _since : datetime.datetime) -> [dict]:
