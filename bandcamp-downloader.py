@@ -217,6 +217,8 @@ def main() -> int:
 
     print('Done.')
 
+    return 0
+
 def filter_by_purchase_time(items : [dict], _since : datetime.datetime) -> [dict]:
     good = []
     for item in items:
