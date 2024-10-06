@@ -410,7 +410,7 @@ def download_file(_url : str, _track_info : dict = None, _attempt : int = 1) -> 
 
 def print_exception(_e : Exception, _msg : str = '') -> None:
     CONFIG['TQDM'].write('\nERROR: {}'.format(_msg))
-    CONFIG['TQDM'].write('\n'.join(traceback.format_exception(_e)))
+    CONFIG['TQDM'].write('\n'.join(traceback.format_exception(etype=type(_e), value=_e , tb=_e.__traceback__)))
     CONFIG['TQDM'].write('\n')
 
 
