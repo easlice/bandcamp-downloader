@@ -193,21 +193,21 @@ def main() -> int:
         sys.exit(2)
 
     print('Starting album downloads...')
+    downloaded_zips = []
     CONFIG['TQDM'] = tqdm(links, unit = 'album')
     if args.parallel_downloads > 1:
         with ThreadPoolExecutor(max_workers = args.parallel_downloads) as executor:
-            executor.map(download_album, links)
+            downloaded_zips = list(executor.map(download_album, links))
     else:
         for link in links:
-            download_album(link)
+            zip_file = download_album(link)
+            if zip_file:
+                downloaded_zips.append(zip_file)
     CONFIG['TQDM'].close()
-
+    downloaded_zips = [zip_file for zip_file in downloaded_zips if zip_file]
+    print(downloaded_zips)
     if args.unzip:
-        base_path = os.getcwd()
-        if args.directory:
-            base_path = args.directory
-        all_zip_files = glob.glob(f'{base_path}/**/*.zip', recursive=True)
-        for zip in all_zip_files:
+        for zip in downloaded_zips:
             print(f'unzipping: {zip}')
             album_name = re.search(r'\- (.+?)\.zip$', zip).group(1)
             extract_dir = os.path.join(os.path.dirname(zip), album_name)
@@ -313,7 +313,7 @@ def get_download_links_for_user(_user : str, _include_hidden : bool, _since : da
 
     return download_urls
 
-def download_album(_album_url : str, _attempt : int = 1) -> None:
+def download_album(_album_url : str, _attempt : int = 1) -> str:
     try:
         soup = BeautifulSoup(
             requests.get(
@@ -341,7 +341,7 @@ def download_album(_album_url : str, _attempt : int = 1) -> None:
 
         download_url = data['download_items'][0]['downloads'][CONFIG['FORMAT']]['url']
         track_info = {key: data['download_items'][0][key] for key in TRACK_INFO_KEYS}
-        download_file(download_url, track_info)
+        return download_file(download_url, track_info)
     except IOError as e:
         if _attempt < CONFIG['MAX_URL_ATTEMPTS']:
             if CONFIG['VERBOSE'] >=2: CONFIG['TQDM'].write('WARN: I/O Error on attempt # [{}] to download the album at [{}]. Trying again...'.format(_attempt, _album_url))
@@ -376,7 +376,6 @@ def download_file(_url : str, _track_info : dict = None, _attempt : int = 1) -> 
             } if _track_info else {}
             filename = CONFIG['FILENAME_FORMAT'].format(**safe_track_info) + extension
             file_path = os.path.join(CONFIG['OUTPUT_DIR'], filename)
-
             if os.path.exists(file_path):
                 if CONFIG['FORCE']:
                     if CONFIG['VERBOSE']: CONFIG['TQDM'].write('--force flag was given. Overwriting existing file at [{}].'.format(file_path))
@@ -384,13 +383,13 @@ def download_file(_url : str, _track_info : dict = None, _attempt : int = 1) -> 
                     actual_size = os.stat(file_path).st_size
                     if expected_size == actual_size:
                         if CONFIG['VERBOSE'] >= 3: CONFIG['TQDM'].write('Skipping album that already exists: [{}]'.format(file_path))
-                        return
+                        return file_path
                     else:
                         if CONFIG['VERBOSE'] >= 2: CONFIG['TQDM'].write('Album at [{}] is the wrong size. Expected [{}] but was [{}]. Re-downloading.'.format(file_path, expected_size, actual_size))
 
             if CONFIG['VERBOSE'] >= 2: CONFIG['TQDM'].write('Album being saved to [{}]'.format(file_path))
             if CONFIG['DRY_RUN']:
-                return
+                return file_path
             os.makedirs(os.path.dirname(file_path), exist_ok=True)
             with open(file_path, 'wb') as fh:
                 for chunk in response.iter_content(chunk_size=8192):
@@ -407,6 +406,7 @@ def download_file(_url : str, _track_info : dict = None, _attempt : int = 1) -> 
             print_exception(e, 'An exception occurred trying to download file url [{}]:'.format(_url))
     except Exception as e:
         print_exception(e, 'An exception occurred trying to download file url [{}]:'.format(_url))
+    return file_path
 
 def print_exception(_e : Exception, _msg : str = '') -> None:
     CONFIG['TQDM'].write('\nERROR: {}'.format(_msg))
