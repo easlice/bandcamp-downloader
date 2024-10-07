@@ -139,9 +139,11 @@ def main() -> int:
         help = 'Only download items purchased on or after the given date. YYYY-MM-DD format, defaults to all items.'
     )
     parser.add_argument(
-        '--unzip',
+        '--extract', '-x',
         action='store_true',
-        help='Unzip albums after downloading, deleting the zip file.'
+        help='Extracts downloaded albums, organised in {ARTIST}/{ALBUM} subdirectories. Songs are extracted to the '
+             'path specified in the `--directory`/`-d` flag, otherwise to the current directory if not specified. '
+             'Upon completion, original .zip file is deleted.'
     )
     parser.add_argument(
         '--dry-run',
@@ -167,7 +169,7 @@ def main() -> int:
     CONFIG['FORMAT'] = args.format
     CONFIG['FORCE'] = args.force
     CONFIG['DRY_RUN'] = args.dry_run
-    CONFIG['UNZIP'] = args.unzip
+    CONFIG['EXTRACT'] = args.extract
 
     if args.wait_after_download < 0:
         parser.error('--wait-after-download must be at least 0.')
@@ -206,9 +208,9 @@ def main() -> int:
     CONFIG['TQDM'].close()
     downloaded_zips = [zip_file for zip_file in downloaded_zips if zip_file]
     print(downloaded_zips)
-    if args.unzip:
+    if args.extract:
         for zip in downloaded_zips:
-            print(f'unzipping: {zip}')
+            print(f'Extracting compressed archive: {zip}')
             album_name = re.search(r'\- (.+?)\.zip$', zip).group(1)
             extract_dir = os.path.join(os.path.dirname(zip), album_name)
             with zipfile.ZipFile(zip, 'r') as zip_file:
