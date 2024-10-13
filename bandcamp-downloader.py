@@ -199,14 +199,13 @@ def main() -> int:
     CONFIG['TQDM'] = tqdm(links, unit = 'album')
     if args.parallel_downloads > 1:
         with ThreadPoolExecutor(max_workers = args.parallel_downloads) as executor:
-            downloaded_zips = list(executor.map(download_album, links))
+            downloaded_zips = [file_path for file_path in list(executor.map(download_album, links)) if _is_zip(file_path)]
     else:
         for link in links:
-            zip_file = download_album(link)
-            if zip_file:
-                downloaded_zips.append(zip_file)
+            file_path = download_album(link)
+            if _is_zip(file_path):
+                downloaded_zips.append(file_path)
     CONFIG['TQDM'].close()
-    downloaded_zips = [zip_file for zip_file in downloaded_zips if zip_file]
     print(downloaded_zips)
     if args.extract:
         for zip in downloaded_zips:
@@ -454,6 +453,11 @@ def get_cookies():
         return func(domain_name = 'bandcamp.com')
     except AttributeError:
         raise Exception('Browser type [{}] is unknown. Can\'t pull cookies, so can\'t authenticate with bandcamp.'.format(CONFIG['BROWSER']))
+
+def _is_zip(file_path: str) -> bool:
+    # Determine if the file is a compressed .zip archive
+    return file_path.endswith('.zip')
+
 
 if __name__ == '__main__':
     sys.exit(main())
