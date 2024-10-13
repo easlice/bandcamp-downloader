@@ -98,7 +98,7 @@ usage: bandcamp-downloader.py [-h]
                               [--include-hidden]
                               [--download-since DOWNLOAD_SINCE]
                               [--dry-run]
-                              [--unzip]
+                              [--extract]
                               [--verbose] [-v]
                               username
 
@@ -156,7 +156,7 @@ optional arguments:
   --dry-run             Don't actually download files, just process all the web data
                         and report what would have been done.
                         
-  --unzip               Unzip all albums into a subfolder named after the album, under the artist folder.
+  --extract               Unzip all albums into a subfolder named after the album, under the artist folder.
                         Deletes the zip file on completion of command.  
   --verbose, -v
 ```
