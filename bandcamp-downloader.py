@@ -359,7 +359,8 @@ def download_album(_album_url : str, _attempt : int = 1) -> str:
             CONFIG['TQDM'].update()
             time.sleep(CONFIG['POST_DOWNLOAD_WAIT'])
 
-def download_file(_url : str, _track_info : dict = None, _attempt : int = 1) -> None:
+def download_file(_url : str, _track_info : dict = None, _attempt : int = 1) -> str:
+    """Return a string representing the absolute path to the file being downloaded"""
     try:
         with requests.get(
                 _url,
