@@ -26,8 +26,7 @@ USER_URL = 'https://bandcamp.com/{}'
 COLLECTION_POST_URL = 'https://bandcamp.com/api/fancollection/1/collection_items'
 HIDDEN_POST_URL = 'https://bandcamp.com/api/fancollection/1/hidden_items'
 FILENAME_REGEX = re.compile('filename\\*=UTF-8\'\'(.*)')
-WINDOWS_DRIVE_REGEX = re.compile(r'[a-zA-Z]:\\')
-SANATIZE_PATH_WINDOWS_REGEX = re.compile(r'[<>:"/|?*\\]')
+SANITIZE_PATH_WINDOWS_REGEX = re.compile(r'[<>:"/|?*\\]')
 CONFIG = {
     'VERBOSE' : False,
     'OUTPUT_DIR' : None,
@@ -420,15 +419,7 @@ def print_exception(_e : Exception, _msg : str = '') -> None:
 # So let's replace known bad characters with '-'
 def sanitize_filename(_path : str) -> str:
     if sys.platform.startswith('win'):
-        # Ok, we need to leave on the ':' if it is like 'D:\'
-        # otherwise, we need to remove it.
-        new_path = ''
-        search_path = _path
-        if WINDOWS_DRIVE_REGEX.match(_path):
-            new_path += _path[0:3]
-            search_path = _path[3:]
-        new_path += SANATIZE_PATH_WINDOWS_REGEX.sub('-', search_path)
-        return new_path
+        return re.sub(SANITIZE_PATH_WINDOWS_REGEX, '-', _path)
     else:
         # Remove `/`
         return _path.replace('/', '-')
