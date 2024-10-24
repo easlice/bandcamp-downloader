@@ -18,7 +18,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 # These require pip installs
 from bs4 import BeautifulSoup, SoupStrainer
-import requests
+from curl_cffi import requests
 import browser_cookie3
 from tqdm import tqdm
 
@@ -233,35 +233,38 @@ def fetch_items(_url : str, _user_id : str, _last_token : str, _count : int, _si
         'count' : _count,
         'older_than_token' : _last_token,
     }
-    with requests.post(
+    response = requests.post(
         _url,
         data = json.dumps(payload),
         cookies = CONFIG['COOKIE_JAR'],
-    ) as response:
-        response.raise_for_status()
-        data = json.loads(response.text)
+        impersonate='chrome'
+    )
+    response.raise_for_status()
+    data = json.loads(response.text)
 
-        # There might be no data, for example calling `--include-hidden` with no hidden items
-        if 'redownload_urls' not in data:
-            return []
+    # There might be no data, for example calling `--include-hidden` with no hidden items
+    if 'redownload_urls' not in data:
+        return []
 
-        if _since is None:
-            return data['redownload_urls'].values()
-        items = []
-        for item in filter_by_purchase_time(data['items'], _since):
-            item_id = str(item['sale_item_id'])
-            item_type = item['sale_item_type']
-            items.append(data['redownload_urls'][item_type+item_id])
-        return items
+    if _since is None:
+        return data['redownload_urls'].values()
+    items = []
+    for item in filter_by_purchase_time(data['items'], _since):
+        item_id = str(item['sale_item_id'])
+        item_type = item['sale_item_type']
+        items.append(data['redownload_urls'][item_type+item_id])
+    return items
 
 def get_download_links_for_user(_user : str, _include_hidden : bool, _since : datetime.datetime) -> [str]:
     print('Retrieving album links from user [{}]\'s collection.'.format(_user))
 
+    req_text = requests.get(
+        USER_URL.format(_user),
+        cookies = CONFIG['COOKIE_JAR'],
+        impersonate='chrome',
+    ).text
     soup = BeautifulSoup(
-        requests.get(
-            USER_URL.format(_user),
-            cookies = CONFIG['COOKIE_JAR']
-        ).text,
+        req_text,
         'html.parser',
         parse_only = SoupStrainer('div', id='pagedata'),
     )
@@ -318,7 +321,8 @@ def download_album(_album_url : str, _attempt : int = 1) -> str:
         soup = BeautifulSoup(
             requests.get(
                 _album_url,
-                cookies = CONFIG['COOKIE_JAR']
+                cookies = CONFIG['COOKIE_JAR'],
+                impersonate='chrome',
             ).text,
             'html.parser',
             parse_only = SoupStrainer('div', id='pagedata'),
@@ -360,44 +364,45 @@ def download_album(_album_url : str, _attempt : int = 1) -> str:
 def download_file(_url : str, _track_info : dict = None, _attempt : int = 1) -> str:
     """Return a string representing the absolute path to the file being downloaded"""
     try:
-        with requests.get(
+        response = requests.get(
                 _url,
                 cookies = CONFIG['COOKIE_JAR'],
+                impersonate='chrome',
                 stream = True,
-        ) as response:
-            response.raise_for_status()
+        )
+        response.raise_for_status()
 
-            expected_size = int(response.headers['content-length'])
-            filename_match = FILENAME_REGEX.search(response.headers['content-disposition'])
-            original_filename = urllib.parse.unquote(filename_match.group(1)) if filename_match else _url.split('/')[-1]
-            extension = os.path.splitext(original_filename)[1]
-            # Sanitize all input values for formatting
-            safe_track_info = {
-                key: (sanitize_filename(value) if type(value) == str else value) for key, value in _track_info.items()
-            } if _track_info else {}
-            filename = CONFIG['FILENAME_FORMAT'].format(**safe_track_info) + extension
-            file_path = os.path.join(CONFIG['OUTPUT_DIR'], filename)
-            if os.path.exists(file_path):
-                if CONFIG['FORCE']:
-                    if CONFIG['VERBOSE']: CONFIG['TQDM'].write('--force flag was given. Overwriting existing file at [{}].'.format(file_path))
+        expected_size = int(response.headers['content-length'])
+        filename_match = FILENAME_REGEX.search(response.headers['content-disposition'])
+        original_filename = urllib.parse.unquote(filename_match.group(1)) if filename_match else _url.split('/')[-1]
+        extension = os.path.splitext(original_filename)[1]
+        # Sanitize all input values for formatting
+        safe_track_info = {
+            key: (sanitize_filename(value) if type(value) == str else value) for key, value in _track_info.items()
+        } if _track_info else {}
+        filename = CONFIG['FILENAME_FORMAT'].format(**safe_track_info) + extension
+        file_path = os.path.join(CONFIG['OUTPUT_DIR'], filename)
+        if os.path.exists(file_path):
+            if CONFIG['FORCE']:
+                if CONFIG['VERBOSE']: CONFIG['TQDM'].write('--force flag was given. Overwriting existing file at [{}].'.format(file_path))
+            else:
+                actual_size = os.stat(file_path).st_size
+                if expected_size == actual_size:
+                    if CONFIG['VERBOSE'] >= 3: CONFIG['TQDM'].write('Skipping album that already exists: [{}]'.format(file_path))
+                    return file_path
                 else:
-                    actual_size = os.stat(file_path).st_size
-                    if expected_size == actual_size:
-                        if CONFIG['VERBOSE'] >= 3: CONFIG['TQDM'].write('Skipping album that already exists: [{}]'.format(file_path))
-                        return file_path
-                    else:
-                        if CONFIG['VERBOSE'] >= 2: CONFIG['TQDM'].write('Album at [{}] is the wrong size. Expected [{}] but was [{}]. Re-downloading.'.format(file_path, expected_size, actual_size))
+                    if CONFIG['VERBOSE'] >= 2: CONFIG['TQDM'].write('Album at [{}] is the wrong size. Expected [{}] but was [{}]. Re-downloading.'.format(file_path, expected_size, actual_size))
 
-            if CONFIG['VERBOSE'] >= 2: CONFIG['TQDM'].write('Album being saved to [{}]'.format(file_path))
-            if CONFIG['DRY_RUN']:
-                return file_path
-            os.makedirs(os.path.dirname(file_path), exist_ok=True)
-            with open(file_path, 'wb') as fh:
-                for chunk in response.iter_content(chunk_size=8192):
-                    fh.write(chunk)
-                actual_size = fh.tell()
-            if expected_size != actual_size:
-                raise IOError('Incomplete read. {} bytes read, {} bytes expected'.format(actual_size, expected_size))
+        if CONFIG['VERBOSE'] >= 2: CONFIG['TQDM'].write('Album being saved to [{}]'.format(file_path))
+        if CONFIG['DRY_RUN']:
+            return file_path
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        with open(file_path, 'wb') as fh:
+            for chunk in response.iter_content(chunk_size=8192):
+                fh.write(chunk)
+            actual_size = fh.tell()
+        if expected_size != actual_size:
+            raise IOError('Incomplete read. {} bytes read, {} bytes expected'.format(actual_size, expected_size))
     except IOError as e:
         if _attempt < CONFIG['MAX_URL_ATTEMPTS']:
             if CONFIG['VERBOSE'] >=2: CONFIG['TQDM'].write('WARN: I/O Error on attempt # [{}] to download the file at [{}]. Trying again...'.format(_attempt, _url))
