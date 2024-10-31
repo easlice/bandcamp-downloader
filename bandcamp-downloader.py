@@ -37,6 +37,7 @@ CONFIG = {
     'MAX_URL_ATTEMPTS' : 5,
     'URL_RETRY_WAIT' : 5,
     'POST_DOWNLOAD_WAIT' : 1,
+    'SINCE' : None,
 }
 MAX_THREADS = 32
 DEFAULT_THREADS = 5
@@ -163,8 +164,6 @@ def main() -> int:
     CONFIG['BROWSER'] = args.browser
     if args.download_since:
         CONFIG['SINCE'] = datetime.datetime.strptime(args.download_since, '%Y-%m-%d')
-    else:
-        CONFIG['SINCE'] = None
     CONFIG['FORMAT'] = args.format
     CONFIG['FORCE'] = args.force
     CONFIG['DRY_RUN'] = args.dry_run
@@ -184,14 +183,25 @@ def main() -> int:
     if CONFIG['FORCE']: print('WARNING: --force flag set, existing files will be overwritten.')
     CONFIG['COOKIE_JAR'] = get_cookies()
 
-    links = get_download_links_for_user(args.username, args.include_hidden, CONFIG['SINCE'])
-    if CONFIG['VERBOSE']: print('Found [{}] links for [{}]\'s collection.'.format(len(links), args.username))
-    if not links:
-        if CONFIG['SINCE'] is None:
-            print('WARN: No album links found for user [{}]. Are you logged in and have you selected the correct browser to pull cookies from?'.format(args.username))
-        else:
-            print('WARN: No album links found for user [{}] since [{}]. Are you logged in and have you selected the correct browser to pull cookies from, and is the specified time old enough?'.format(args.username, args.download_since))
+    items = get_items_for_user(args.username, args.include_hidden)
+    if not items:
+        print('WARN: No album links found for user [{}]. Are you logged in and have you selected the correct browser to pull cookies from?'.format(args.username))
         sys.exit(2)
+    if CONFIG['VERBOSE']: print('Found [{}] links for [{}]\'s collection.'.format(len(items), args.username))
+
+    if CONFIG['SINCE']:
+        # Filter items by purchase time
+        items = {key: items[key] for key in items
+                 if purchase_time_ok(items[key], CONFIG['SINCE'])}
+        if not items:
+            print('No album links purchased since [{}].'.format(CONFIG['SINCE']))
+            sys.exit(0)
+
+        if CONFIG['VERBOSE']:
+            print('[{}] album links purchased since [{}].'.format(len(items), CONFIG['SINCE']))
+
+
+    links = [item['redownload_url'] for item in items.values()]
 
     print('Starting album downloads...')
     downloaded_zips = []
@@ -219,99 +229,115 @@ def main() -> int:
 
     return 0
 
-def filter_by_purchase_time(items : [dict], _since : datetime.datetime) -> [dict]:
-    good = []
-    for item in items:
-        purchaseTime = datetime.datetime.strptime(item['purchased'], '%d %b %Y %H:%M:%S GMT')
-        if purchaseTime >= _since:
-            good.append(item)
-    return good
+# Returns true if the item's purchase time is no earlier than the given
+# cutoff, or if the item's purchase time can't be found.
+def purchase_time_ok(_item : dict, _since : datetime.datetime) -> bool:
+    # If there's no purchased field we have to say yes since we can't
+    # reliably exclude this item.
+    if 'purchased' not in _item: return True
 
-def fetch_items(_url : str, _user_id : str, _last_token : str, _count : int, _since : datetime.datetime) -> [str]:
+    # If there is a purchased field, compare it to the given cutoff.
+    purchaseTime = datetime.datetime.strptime(_item['purchased'], '%d %b %Y %H:%M:%S GMT')
+    return purchaseTime >= _since
+
+# Returns true if a valid item key can be assembled from the given item dict.
+def item_has_key(_item) -> bool:
+    return 'sale_item_type' in _item and 'sale_item_id' in _item
+
+# Returns the canonical key for an item (within the bandcamp API),
+# its type followed by its item id.
+def key_for_item(_item) -> str:
+    return str(_item['sale_item_type']) + str(_item['sale_item_id'])
+
+# Merges the 'redownload_urls' dict into the 'items' dict from the bandcamp
+# item list. The result is a dict keyed by key_for_item(item), where each
+# item has the added key 'redownload_url'.
+# Items with mismatched keys or no redownload url are dropped.
+def merge_items_and_urls(_items : dict, _urls : dict) -> dict:
+    results = {}
+    for key,item in _items:
+        if not item_has_key(item) or key_for_item(item) != key or key not in _urls:
+            continue
+        new_item = dict(item)
+        new_item['redownload_url'] = _urls[key]
+        # Just in case the "canonical" key doesn't match the original dictionary,
+        # recalculate it when adding to the results.
+        results[key_for_item(new_item)] = new_item
+    return results
+
+# Fetch item data for the given user via the bandcamp API, then return the
+# 'items' subobject, with a 'redownload_url' field added to each.
+def bandcamp_fetch_items(_hidden : bool, _user_id : str, _last_token : str, _count : int) -> dict:
+    url = COLLECTION_POST_URL if not _hidden else HIDDEN_POST_URL
+    if _count <= 0: return {}
     payload = {
         'fan_id' : _user_id,
         'count' : _count,
         'older_than_token' : _last_token,
     }
     with requests.post(
-        _url,
+        url,
         data = json.dumps(payload),
         cookies = CONFIG['COOKIE_JAR'],
     ) as response:
         response.raise_for_status()
         data = json.loads(response.text)
 
-        # There might be no data, for example calling `--include-hidden` with no hidden items
-        if 'redownload_urls' not in data:
-            return []
+        return merge_items_and_urls(data['items'], data['redownload_urls'] or {})
 
-        if _since is None:
-            return data['redownload_urls'].values()
-        items = []
-        for item in filter_by_purchase_time(data['items'], _since):
-            item_id = str(item['sale_item_id'])
-            item_type = item['sale_item_type']
-            items.append(data['redownload_urls'][item_type+item_id])
-        return items
-
-def get_download_links_for_user(_user : str, _include_hidden : bool, _since : datetime.datetime) -> [str]:
-    print('Retrieving album links from user [{}]\'s collection.'.format(_user))
-
+# Loads the given url and looks for the 'data-blob' property on the div
+# inside 'pagedata'. If found, converts it from json to a dict.
+# Used to fetch the initial user metadata from their account landing page.
+def data_blob_for_url(_url : str) -> dict:
     soup = BeautifulSoup(
-        requests.get(
-            USER_URL.format(_user),
-            cookies = CONFIG['COOKIE_JAR']
-        ).text,
+        requests.get(_url, cookies = CONFIG['COOKIE_JAR']).text,
         'html.parser',
         parse_only = SoupStrainer('div', id='pagedata'),
     )
     div = soup.find('div')
     if not div:
-        print('ERROR: No div with pagedata found for user at url [{}]'.format(USER_URL.format(_user)))
-        return
+        print('ERROR: No div with pagedata found for user at url [{}]'.format(_url))
+        return {}
     data = json.loads(html.unescape(div.get('data-blob')))
+    return data
+
+# Returns a dictionary mapping item key to item. In addition to the basic
+# bandcamp API item dict, returned items have their redownload url in
+# field 'redownload_url'.
+def get_items_for_user(_user : str, _include_hidden : bool) -> dict:
+    # Get the initial metadata from the json in the 'data-blob' div on the
+    # user landing page.
+    data = data_blob_for_url(USER_URL.format(_user))
     if 'collection_count' not in data:
         print('ERROR: No collection info for user {}.\nPlease double check that your given username is correct.\nIt should be given exactly as it appears at the end of your bandcamp user url.\nFor example: bandcamp.com/user_name'.format(
             _user
         ))
         exit(2)
-
-    # The collection_data.redownload_urls includes links for both hidden and
-    # unhidden items. The unhidden items all appear before the hidden items in
-    # the raw json response, so in python 3.7+ we can probably expect that this
-    # ordering carries through to the keys of redownload_urls and just truncate
-    # the list... but this is a little uncomfortable to rely on, so let's divide
-    # them up by explicitly checking item_cache.
-    items = list(data['item_cache']['collection'].values())
-    if _include_hidden:
-        items.extend(data['item_cache']['hidden'].values())
-    if _since:
-        items = filter_by_purchase_time(items, _since)
-    item_keys = [str(item['sale_item_type']) + str(item['sale_item_id'])
-                 for item in items
-                 if 'sale_item_type' in item and 'sale_item_id' in item]
-    all_urls = data['collection_data']['redownload_urls']
-    download_urls = [all_urls[key] for key in item_keys if key in all_urls]
-
     user_id = data['fan_data']['fan_id']
 
-    download_urls.extend(fetch_items(
-        COLLECTION_POST_URL,
+    items = data['item_cache']['collection']
+    if _include_hidden:
+        items.update(data['item_cache']['hidden'])
+    # Attach download urls to the first page of items.
+    items = merge_items_and_urls(items, data['collection_data']['redownload_urls'])
+    
+    # Fetch the rest of the visible library items.
+    items.update(bandcamp_fetch_items(
+        False,
         user_id,
         data['collection_data']['last_token'],
         # count is the number we have left to fetch after the initial data blob
-        data['collection_data']['item_count'] - len(data['item_cache']['collection']),
-        _since))
+        data['collection_data']['item_count'] - len(data['item_cache']['collection'])))
 
     if _include_hidden:
-        download_urls.extend(fetch_items(
-            HIDDEN_POST_URL,
+        # Fetch the rest of the hidden library items.
+        items.update(bandcamp_fetch_items(
+            True,
             user_id,
             data['hidden_data']['last_token'],
-            data['hidden_data']['item_count'] - len(data['item_cache']['hidden']),
-            _since))
-
-    return download_urls
+            data['hidden_data']['item_count'] - len(data['item_cache']['hidden'])))
+    
+    return items
 
 def download_album(_album_url : str, _attempt : int = 1) -> str:
     try:
