@@ -206,9 +206,9 @@ def main() -> int:
     CONFIG['TQDM'] = tqdm(items, unit = 'album')
     if args.parallel_downloads > 1:
         with ThreadPoolExecutor(max_workers = args.parallel_downloads) as executor:
-            downloaded_zips = [file_path for file_path in list(executor.map(download_album, items)) if _is_zip(file_path)]
+            downloaded_zips = [file_path for file_path in list(executor.map(download_album, items.values())) if _is_zip(file_path)]
     else:
-        for album in items:
+        for album in items.values():
             file_path = download_album(album)
             if _is_zip(file_path):
                 downloaded_zips.append(file_path)
