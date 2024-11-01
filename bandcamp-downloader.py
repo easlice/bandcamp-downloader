@@ -182,7 +182,6 @@ def main() -> int:
     if CONFIG['VERBOSE']: print(args)
     if CONFIG['FORCE']: print('WARNING: --force flag set, existing files will be overwritten.')
     CONFIG['COOKIE_JAR'] = get_cookies()
-    print("cookies: [{}]".format(CONFIG['COOKIE_JAR']))
 
     items = get_items_for_user(args.username, args.include_hidden)
     if not items:
@@ -255,16 +254,15 @@ def key_for_item(_item) -> str:
 # item list. The result is a dict keyed by key_for_item(item), where each
 # item has the added key 'redownload_url'.
 # Items with mismatched keys or no redownload url are dropped.
-def merge_items_and_urls(_items : dict, _urls : dict) -> dict:
+def merge_items_and_urls(_items : list, _urls : dict) -> dict:
     results = {}
-    for key,item in _items:
-        if not item_has_key(item) or key_for_item(item) != key or key not in _urls:
+    for item in _items:
+        if not item_has_key(item) or key_for_item(item) not in _urls:
             continue
+        key = key_for_item(item)
         new_item = dict(item)
         new_item['redownload_url'] = _urls[key]
-        # Just in case the "canonical" key doesn't match the original dictionary,
-        # recalculate it when adding to the results.
-        results[key_for_item(new_item)] = new_item
+        results[key] = new_item
     return results
 
 # Fetch item data for the given user via the bandcamp API, then return the
@@ -297,9 +295,7 @@ def pagedata_for_url(_url : str) -> dict:
         parse_only = SoupStrainer('div', id='pagedata'),
     )
     div = soup.find('div')
-    if not div:
-        print(text)
-        return {}
+    if not div: return {}
     return json.loads(html.unescape(div.get('data-blob')))
 
 # Returns a dictionary mapping item key to item. In addition to the basic
@@ -324,7 +320,7 @@ def get_items_for_user(_user : str, _include_hidden : bool) -> dict:
     if _include_hidden:
         items.update(data['item_cache']['hidden'])
     # Attach download urls to the first page of items.
-    items = merge_items_and_urls(items, data['collection_data']['redownload_urls'])
+    items = merge_items_and_urls(items.values(), data['collection_data']['redownload_urls'])
     
     # Fetch the rest of the visible library items.
     items.update(fetch_items(
