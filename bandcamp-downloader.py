@@ -201,18 +201,15 @@ def main() -> int:
             print('[{}] album links purchased since [{}].'.format(len(items), CONFIG['SINCE']))
 
 
-    links = [item['redownload_url'] for item in items.values()]
-
     print('Starting album downloads...')
     downloaded_zips = []
-    CONFIG['TQDM'] = tqdm(links, unit = 'album')
+    CONFIG['TQDM'] = tqdm(items, unit = 'album')
     if args.parallel_downloads > 1:
         with ThreadPoolExecutor(max_workers = args.parallel_downloads) as executor:
-            download_paths = list(executor.map(download_album, links))
-            downloaded_zips = [file_path for file_path in list(executor.map(download_album, links)) if _is_zip(file_path)]
+            downloaded_zips = [file_path for file_path in list(executor.map(download_album, items)) if _is_zip(file_path)]
     else:
-        for link in links:
-            file_path = download_album(link)
+        for album in items:
+            file_path = download_album(album)
             if _is_zip(file_path):
                 downloaded_zips.append(file_path)
     CONFIG['TQDM'].close()
@@ -378,22 +375,23 @@ def download_exists(_file_path : str, _download_size : str) -> bool:
     if CONFIG['VERBOSE'] >= 2: CONFIG['TQDM'].write('Album at [{}] is the wrong size. Expected [{}] but was [{}]. Re-downloading.'.format(_file_path, _download_size, actual_size))
     return False
 
-def download_album(_album_url : str, _attempt : int = 1) -> str:
+def download_album(_album : dict, _attempt : int = 1) -> str:
+    album_url = _album['redownload_url']
     try:
-        data = pagedata_for_url(_album_url)
+        data = pagedata_for_url(album_url)
         if not data:
-            CONFIG['TQDM'].write('ERROR: No div with pagedata found for album at url [{}]'.format(_album_url))
+            CONFIG['TQDM'].write('ERROR: No div with pagedata found for album at url [{}]'.format(album_url))
             return
 
         download_item = data['download_items'][0]
-        album = download_item['title']
+        title = download_item['title']
 
         if not 'downloads' in download_item:
-            CONFIG['TQDM'].write('WARN: Album [{}] at url [{}] has no downloads available.'.format(album, _album_url))
+            CONFIG['TQDM'].write('WARN: Album [{}] at url [{}] has no downloads available.'.format(title, album_url))
             return
 
         if not CONFIG['FORMAT'] in download_item['downloads']:
-            CONFIG['TQDM'].write('WARN: Album [{}] at url [{}] does not have a download for format [{}].'.format(album, _album_url, CONFIG['FORMAT']))
+            CONFIG['TQDM'].write('WARN: Album [{}] at url [{}] does not have a download for format [{}].'.format(title, album_url, CONFIG['FORMAT']))
             return
 
         track_info = {key: sanitize_value(download_item[key]) for key in TRACK_INFO_KEYS}
@@ -412,13 +410,13 @@ def download_album(_album_url : str, _attempt : int = 1) -> str:
             return download_file(download_url, file_prefix, extension)
     except IOError as e:
         if _attempt < CONFIG['MAX_URL_ATTEMPTS']:
-            if CONFIG['VERBOSE'] >=2: CONFIG['TQDM'].write('WARN: I/O Error on attempt # [{}] to download the album at [{}]. Trying again...'.format(_attempt, _album_url))
+            if CONFIG['VERBOSE'] >=2: CONFIG['TQDM'].write('WARN: I/O Error on attempt # [{}] to download the album at [{}]. Trying again...'.format(_attempt, album_url))
             time.sleep(CONFIG['URL_RETRY_WAIT'])
-            return download_album(_album_url, _attempt + 1)
+            return download_album(_album, _attempt + 1)
         else:
-            print_exception(e, 'An exception occurred trying to download album url [{}]:'.format(_album_url))
+            print_exception(e, 'An exception occurred trying to download album url [{}]:'.format(album_url))
     except Exception as e:
-        print_exception(e, 'An exception occurred trying to download album url [{}]:'.format(_album_url))
+        print_exception(e, 'An exception occurred trying to download album url [{}]:'.format(album_url))
     finally:
         # only tell TQDM we're done on the first call
         if _attempt == 1:
