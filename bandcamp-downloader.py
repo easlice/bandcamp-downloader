@@ -226,41 +226,6 @@ def main() -> int:
 
     return 0
 
-# Returns true if the item's purchase time is no earlier than the given
-# cutoff, or if the item's purchase time can't be found.
-def purchase_time_ok(_item : dict, _since : datetime.datetime) -> bool:
-    # If there's no purchased field we have to say yes since we can't
-    # reliably exclude this item.
-    if 'purchased' not in _item: return True
-
-    # If there is a purchased field, compare it to the given cutoff.
-    purchaseTime = datetime.datetime.strptime(_item['purchased'], '%d %b %Y %H:%M:%S GMT')
-    return purchaseTime >= _since
-
-# Returns true if a valid item key can be assembled from the given item dict.
-def item_has_key(_item) -> bool:
-    return 'sale_item_type' in _item and 'sale_item_id' in _item
-
-# Returns the canonical key for an item (within the bandcamp API),
-# its type followed by its item id.
-def key_for_item(_item) -> str:
-    return str(_item['sale_item_type']) + str(_item['sale_item_id'])
-
-# Merges the 'redownload_urls' dict into the 'items' dict from the bandcamp
-# item list. The result is a dict keyed by key_for_item(item), where each
-# item has the added key 'redownload_url'.
-# Items with mismatched keys or no redownload url are dropped.
-def merge_items_and_urls(_items : list, _urls : dict) -> dict:
-    results = {}
-    for item in _items:
-        if not item_has_key(item) or key_for_item(item) not in _urls:
-            continue
-        key = key_for_item(item)
-        new_item = dict(item)
-        new_item['redownload_url'] = _urls[key]
-        results[key] = new_item
-    return results
-
 # Fetch item data for the given user via the bandcamp API, then return the
 # 'items' subobject, with 'redownload_url' and 'filename' fields added to each.
 def fetch_items(_hidden : bool, _user_id : str, _last_token : str, _count : int) -> dict:
@@ -339,6 +304,41 @@ def get_items_for_user(_user : str, _include_hidden : bool) -> dict:
     add_item_file_paths(items)
     
     return items
+
+# Returns true if the item's purchase time is no earlier than the given
+# cutoff, or if the item's purchase time can't be found.
+def purchase_time_ok(_item : dict, _since : datetime.datetime) -> bool:
+    # If there's no purchased field we have to say yes since we can't
+    # reliably exclude this item.
+    if 'purchased' not in _item: return True
+
+    # If there is a purchased field, compare it to the given cutoff.
+    purchaseTime = datetime.datetime.strptime(_item['purchased'], '%d %b %Y %H:%M:%S GMT')
+    return purchaseTime >= _since
+
+# Returns true if a valid item key can be assembled from the given item dict.
+def item_has_key(_item) -> bool:
+    return 'sale_item_type' in _item and 'sale_item_id' in _item
+
+# Returns the canonical key for an item (within the bandcamp API),
+# its type followed by its item id.
+def key_for_item(_item) -> str:
+    return str(_item['sale_item_type']) + str(_item['sale_item_id'])
+
+# Merges the 'redownload_urls' dict into the 'items' dict from the bandcamp
+# item list. The result is a dict keyed by key_for_item(item), where each
+# item has the added key 'redownload_url'.
+# Items with mismatched keys or no redownload url are dropped.
+def merge_items_and_urls(_items : list, _urls : dict) -> dict:
+    results = {}
+    for item in _items:
+        if not item_has_key(item) or key_for_item(item) not in _urls:
+            continue
+        key = key_for_item(item)
+        new_item = dict(item)
+        new_item['redownload_url'] = _urls[key]
+        results[key] = new_item
+    return results
 
 # Given a dictionary of bandcamp items, calculates their download path based
 # on the configured format, appends the item key if two names collide, and
