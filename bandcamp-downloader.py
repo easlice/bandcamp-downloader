@@ -60,6 +60,11 @@ SUPPORTED_BROWSERS = [
     'opera',
     'edge'
 ]
+TRACK_INFO_KEYS = [
+    'item_id',
+    'artist',
+    'title'
+]
 
 def main() -> int:
     parser = argparse.ArgumentParser(description = 'Download your collection from bandcamp. Requires a logged in session in a supported browser so that the browser cookies can be used to authenticate with bandcamp. Albums are saved into directories named after their artist. Already existing albums will have their file size compared to what is expected and re-downloaded if the sizes differ. Otherwise already existing albums will not be re-downloaded.')
@@ -286,13 +291,8 @@ def pagedata_for_url(_url : str) -> dict:
         parse_only = SoupStrainer('div', id='pagedata'),
     )
     div = soup.find('div')
-    if not div:
-        print(text)
-        return {}
-    result = json.loads(html.unescape(div.get('data-blob')))
-    if not result:
-        print(text)
-    return result
+    if not div: return {}
+    return json.loads(html.unescape(div.get('data-blob')))
 
 # Returns a dictionary mapping item key to item. In addition to the basic
 # bandcamp API item dict, returned items have their redownload url in
@@ -363,10 +363,10 @@ def add_item_file_paths(_items : dict):
     # Now rescan to apply final (deduped) paths.
     for key,item in _items.items():
         filename = filenames[key]
-        if filename_counts[item['raw_filename']] > 1:
+        if filename_counts[filename] > 1:
             # This filename is not unique, append the (globally unique) item
             # key so their downloads don't overwrite each other.
-            filename = item['raw_filename'] + '-' + key
+            filename = filename + '-' + key
         item['file_path'] = os.path.join(CONFIG['OUTPUT_DIR'], filename)
 
 # Check if a file already exists at the given path that matches the given
