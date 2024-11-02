@@ -416,7 +416,7 @@ def pagedata_with_retry(_url : str) -> dict:
         try:
             data = pagedata_for_url(_url)
             if data: return data
-            if CONFIG['VERBOSE'] >= 2: CONFIG['TQDM'].write('WARN: no pagedata found fetching album url [{}] (you may be rate-limited, try increasing --wait-after-download or --retry-wait)'.format(_url))
+            if CONFIG['VERBOSE']: CONFIG['TQDM'].write('WARN: no pagedata found fetching album url [{}] (you may be rate-limited, try increasing --wait-after-download or --retry-wait)'.format(_url))
         except IOError as e:
             if CONFIG['VERBOSE'] >=2: CONFIG['TQDM'].write('WARN: I/O Error on attempt # [{}] to download the page data at [{}].'.format(attempt, _url))
         except Exception as e:
