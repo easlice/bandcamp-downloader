@@ -524,8 +524,11 @@ def sanitize_value(_value : any) -> any:
     return _value
 
 def extension_from_url(_url : str) -> str:
-    filename = _url.split('/')[-1]
-    return os.path.splitext(filename)[1]
+    path = urllib.parse.urlparse(_url).path
+
+    filename = path.split('/')[-1]
+    if '.' not in filename: return ''
+    return path[path.rindex('.'):]
 
 def extension_from_type(_download_type : str, _format : str) -> str:
     if _download_type == "a": return ".zip"
