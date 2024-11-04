@@ -22,6 +22,9 @@ from curl_cffi import requests
 import browser_cookie3
 from tqdm import tqdm
 
+import faulthandler
+faulthandler.enable()
+
 USER_URL = 'https://bandcamp.com/{}'
 COLLECTION_POST_URL = 'https://bandcamp.com/api/fancollection/1/collection_items'
 HIDDEN_POST_URL = 'https://bandcamp.com/api/fancollection/1/hidden_items'
@@ -271,6 +274,8 @@ def get_download_links_for_user(_user : str, _include_hidden : bool, _since : da
     div = soup.find('div')
     if not div:
         print('ERROR: No div with pagedata found for user at url [{}]'.format(USER_URL.format(_user)))
+        import pprint
+        pprint.pprint(req_text)
         return
     data = json.loads(html.unescape(div.get('data-blob')))
     if 'collection_count' not in data:
@@ -398,11 +403,12 @@ def download_file(_url : str, _track_info : dict = None, _attempt : int = 1) -> 
             return file_path
         os.makedirs(os.path.dirname(file_path), exist_ok=True)
         with open(file_path, 'wb') as fh:
-            for chunk in response.iter_content(chunk_size=8192):
+            for chunk in response.iter_content():
                 fh.write(chunk)
             actual_size = fh.tell()
         if expected_size != actual_size:
             raise IOError('Incomplete read. {} bytes read, {} bytes expected'.format(actual_size, expected_size))
+        return file_path
     except IOError as e:
         if _attempt < CONFIG['MAX_URL_ATTEMPTS']:
             if CONFIG['VERBOSE'] >=2: CONFIG['TQDM'].write('WARN: I/O Error on attempt # [{}] to download the file at [{}]. Trying again...'.format(_attempt, _url))
@@ -412,11 +418,11 @@ def download_file(_url : str, _track_info : dict = None, _attempt : int = 1) -> 
             print_exception(e, 'An exception occurred trying to download file url [{}]:'.format(_url))
     except Exception as e:
         print_exception(e, 'An exception occurred trying to download file url [{}]:'.format(_url))
-    return file_path
+    return None
 
 def print_exception(_e : Exception, _msg : str = '') -> None:
     CONFIG['TQDM'].write('\nERROR: {}'.format(_msg))
-    CONFIG['TQDM'].write('\n'.join(traceback.format_exception(etype=type(_e), value=_e , tb=_e.__traceback__)))
+    CONFIG['TQDM'].write('\n'.join(traceback.format_exception(_e)))
     CONFIG['TQDM'].write('\n')
 
 
@@ -452,7 +458,7 @@ def get_cookies():
 
 def _is_zip(file_path: str) -> bool:
     # Determine if the file is a compressed .zip archive
-    return file_path.endswith('.zip')
+    return file_path.endswith('.zip') if file_path else False
 
 
 if __name__ == '__main__':
