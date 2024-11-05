@@ -333,6 +333,8 @@ def merge_items_and_urls(_items : list, _urls : dict) -> dict:
     results = {}
     for item in _items:
         if not item_has_key(item) or key_for_item(item) not in _urls:
+            CONFIG['TQDM'].write("WARN: couldn't find redownload URL for item_id:[{}], artist:[{}], title:[{}]".format(
+                item['item_id'], item['band_name'], item['item_title']))
             continue
         key = key_for_item(item)
         new_item = dict(item)
@@ -426,7 +428,13 @@ def pagedata_with_retry(_url : str) -> dict:
 
 # Download the file for the given bandcamp album, and notify TQDM when done.
 def download_and_log_album(_album : dict):
-    download_album(_album)
+    try:
+        download_album(_album)
+    except Exception as e:
+         band_name = _album.get('band_name', '')
+         title = _album.get('item_title', '')
+         print_exception(e, 'Trying to download album [{}] with artist [{}] and title [{}]:').format(
+             key_for_item(_album), band_name, title)
     CONFIG['TQDM'].update()
     time.sleep(CONFIG['POST_DOWNLOAD_WAIT'])
 
@@ -434,6 +442,7 @@ def download_and_log_album(_album : dict):
 # to the file extension for this item, and the key 'downloaded' to whether
 # a file was successfully downloaded.
 def download_album(_album : dict):
+    _album['extension'] = extension_from_type(_album['url_hints']['item_type'], CONFIG['FORMAT'])
     _album['downloaded'] = False
     album_url = _album['redownload_url']
     data = pagedata_with_retry(album_url)
@@ -452,7 +461,8 @@ def download_album(_album : dict):
     download = download_item['downloads'][CONFIG['FORMAT']] 
     download_url = download['url']
     download_size = download.get('size_mb', None)
-    _album['extension'] = extension_from_type(download_item['download_type'], CONFIG['FORMAT']) or extension_from_url(download_url)
+    # If this is an unknown format, get the extension from the download url.
+    if not _album['extension']: _album['extension'] = extension_from_url(download_url)
 
     file_path = _album['file_path'] + _album['extension']
     # Only start the download if a matching file doesn't already exist.
