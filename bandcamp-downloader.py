@@ -384,7 +384,7 @@ def download_exists(_file_path : str, _download_size : str) -> bool:
         # This is rare but can happen, a few downloads have no size
         # metadata -- to be safe, don't report that we already have
         # the file if we can't verify the size.
-        if CONFIG['VERBOSE'] >= 2: CONFIG['TQDM'].write('Album at [{}] has no expected download size. Re-downloading.'.format(_file_path))
+        if CONFIG['VERBOSE'] >= 2: CONFIG['TQDM'].write('File at [{}] has no expected download size. Re-downloading.'.format(_file_path))
         return False
 
     actual_size = os.stat(_file_path).st_size
@@ -398,16 +398,16 @@ def download_exists(_file_path : str, _download_size : str) -> bool:
         expected_gb = float(_download_size[:-2])
         offset = abs(actual_gb - expected_gb)
     else:
-        if CONFIG['VERBOSE'] >= 2: CONFIG['TQDM'].write('Album at [{}] has unrecognized expected download size [{}]. Re-downloading.'.format(_file_path, _download_size))
+        if CONFIG['VERBOSE'] >= 2: CONFIG['TQDM'].write('File at [{}] has unrecognized expected download size [{}]. Re-downloading.'.format(_file_path, _download_size))
         return False
     # We should expect a difference of <= 0.05 since bandcamp always gives
     # sizes to one decimal place, but sometimes the reported value is slightly
     # off. The main cause seems to be that archives are regenerated when
     # needed and compression settings are not stable over time.
     if offset < 0.15:
-        if CONFIG['VERBOSE'] >= 3: CONFIG['TQDM'].write('Skipping album that already exists: [{}]'.format(_file_path))
+        if CONFIG['VERBOSE'] >= 3: CONFIG['TQDM'].write('Skipping file that already exists: [{}]'.format(_file_path))
         return True
-    if CONFIG['VERBOSE'] >= 2: CONFIG['TQDM'].write('Album at [{}] is the wrong size. Expected [{}] but was [{}]. Re-downloading.'.format(_file_path, _download_size, actual_size))
+    if CONFIG['VERBOSE'] >= 2: CONFIG['TQDM'].write('File at [{}] is the wrong size. Expected [{}] but was [{}]. Re-downloading.'.format(_file_path, _download_size, actual_size))
     return False
 
 # Get the pagedata json for a url, applying retry / wait settings.
@@ -442,8 +442,13 @@ def download_and_log_album(_album : dict):
 # to the file extension for this item, and the key 'downloaded' to whether
 # a file was successfully downloaded.
 def download_album(_album : dict):
-    _album['extension'] = extension_from_type(_album['url_hints']['item_type'], CONFIG['FORMAT'])
     _album['downloaded'] = False
+    if 'tralbum_type' in _album:
+        _album['extension'] = extension_from_type(_album['tralbum_type'], CONFIG['FORMAT'])
+    else:
+        # This key should never be missing, but if it is, we'll try to recover
+        # the extension later from the download itself.
+        _album['extension'] = ''
     album_url = _album['redownload_url']
     data = pagedata_with_retry(album_url)
     if not data: return # pagedata_with_retry already logged failure
@@ -467,15 +472,15 @@ def download_album(_album : dict):
     file_path = _album['file_path'] + _album['extension']
     # Only start the download if a matching file doesn't already exist.
     if not download_exists(file_path, download_size):
-        _album['downloaded'] = download_file(download_url, file_path)
+        _album['downloaded'] = download_file(download_url, _album)
 
-def download_file(_url : str, _file_path : str, _attempt : int = 1) -> bool:
+def download_file(_url : str, _album : dict, _attempt : int = 1) -> bool:
     """Download the given url to the given file path.
     
     Returns True if the url was successfully downloaded, False otherwise."""
     if CONFIG['DRY_RUN']:
         if CONFIG['VERBOSE'] >= 2:
-            CONFIG['TQDM'].write('Dry run: skipping download for destination [{}]'.format(_file_path))
+            CONFIG['TQDM'].write('Dry run: skipping file download for url [{}]'.format(_url))
         return True
     try:
         with requests.get(
@@ -486,18 +491,26 @@ def download_file(_url : str, _file_path : str, _attempt : int = 1) -> bool:
             response.raise_for_status()
 
             expected_size = int(response.headers['content-length'])
-            if os.path.exists(_file_path) and not CONFIG['FORCE']:
+            filename_match = FILENAME_REGEX.search(response.headers['content-disposition'])
+            original_filename = urllib.parse.unquote(filename_match.group(1)) if filename_match else _url.split('/')[-1]
+            extension = os.path.splitext(original_filename)[1]
+            if extension != '' and extension != _album['extension']:
+                if CONFIG['VERBOSE']: CONFIG['TQDM'].write('WARN: expected extension [{}] but download at [{}] gives [{}].'.format(
+                    _album['extension'], _url, extension))
+                _album['extension'] = extension
+            file_path = _album['file_path'] + _album['extension']
+            if os.path.exists(file_path) and not CONFIG['FORCE']:
                 # This should be quite rare since we already screened existing
                 # files against the album's size metadata, but check one last
                 # time if we already have a file of the right size.
-                actual_size = os.stat(_file_path).st_size
+                actual_size = os.stat(file_path).st_size
                 if expected_size == actual_size:
-                    if CONFIG['VERBOSE'] >= 2: CONFIG['TQDM'].write('Canceling download that matches existing file: [{}]'.format(_file_path))
+                    if CONFIG['VERBOSE'] >= 2: CONFIG['TQDM'].write('Canceling download that matches existing file: [{}]'.format(file_path))
                     return False
 
-            if CONFIG['VERBOSE'] >= 2: CONFIG['TQDM'].write('Album being saved to [{}]'.format(_file_path))
-            os.makedirs(os.path.dirname(_file_path), exist_ok=True)
-            with open(_file_path, 'wb') as fh:
+            if CONFIG['VERBOSE'] >= 2: CONFIG['TQDM'].write('Album being saved to [{}]'.format(file_path))
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+            with open(file_path, 'wb') as fh:
                 for chunk in response.iter_content(chunk_size=8192):
                     fh.write(chunk)
                 actual_size = fh.tell()
@@ -508,7 +521,7 @@ def download_file(_url : str, _file_path : str, _attempt : int = 1) -> bool:
         if _attempt < CONFIG['MAX_URL_ATTEMPTS']:
             if CONFIG['VERBOSE'] >=2: CONFIG['TQDM'].write('WARN: I/O Error on attempt # [{}] to download the file at [{}]. Trying again...'.format(_attempt, _url))
             time.sleep(CONFIG['URL_RETRY_WAIT'])
-            return download_file(_url, _file_path, _attempt + 1)
+            return download_file(_url, _album, _attempt + 1)
         else:
             print_exception(e, 'An exception occurred trying to download file url [{}]:'.format(_url))
     except Exception as e:
