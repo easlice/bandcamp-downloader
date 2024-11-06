@@ -433,8 +433,8 @@ def download_and_log_album(_album : dict):
     except Exception as e:
          band_name = _album.get('band_name', '')
          title = _album.get('item_title', '')
-         print_exception(e, 'Trying to download album [{}] with artist [{}] and title [{}]:').format(
-             key_for_item(_album), band_name, title)
+         print_exception(e, 'Trying to download album [{}] with artist [{}] and title [{}]:'.format(
+             key_for_item(_album), band_name, title))
     CONFIG['TQDM'].update()
     time.sleep(CONFIG['POST_DOWNLOAD_WAIT'])
 
