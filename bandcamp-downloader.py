@@ -37,20 +37,21 @@ CONFIG = {
     'MAX_URL_ATTEMPTS' : 5,
     'URL_RETRY_WAIT' : 5,
     'POST_DOWNLOAD_WAIT' : 1,
+    'SINCE' : None,
 }
 MAX_THREADS = 32
 DEFAULT_THREADS = 5
 DEFAULT_FILENAME_FORMAT = os.path.join('{artist}', '{artist} - {title}')
-SUPPORTED_FILE_FORMATS = [
-    'aac-hi',
-    'aiff-lossless',
-    'alac',
-    'flac',
-    'mp3-320',
-    'mp3-v0',
-    'vorbis',
-    'wav',
-]
+FORMAT_EXTENSIONS = {
+    'aac-hi': '.m4a',
+    'aiff-lossless': '.aiff',
+    'alac': '.m4a',
+    'flac': '.flac',
+    'mp3-320': '.mp3',
+    'mp3-v0': '.mp3',
+    'vorbis': '.ogg',
+    'wav': '.wav'
+}
 SUPPORTED_BROWSERS = [
     'firefox',
     'chrome',
@@ -93,7 +94,7 @@ def main() -> int:
     parser.add_argument(
         '--format', '-f',
         default = 'mp3-320',
-        choices = SUPPORTED_FILE_FORMATS,
+        choices = FORMAT_EXTENSIONS.keys(),
         help = 'What format to download the songs in. Default is \'mp3-320\'.'
     )
     parser.add_argument(
@@ -163,8 +164,6 @@ def main() -> int:
     CONFIG['BROWSER'] = args.browser
     if args.download_since:
         CONFIG['SINCE'] = datetime.datetime.strptime(args.download_since, '%Y-%m-%d')
-    else:
-        CONFIG['SINCE'] = None
     CONFIG['FORMAT'] = args.format
     CONFIG['FORCE'] = args.force
     CONFIG['DRY_RUN'] = args.dry_run
@@ -184,31 +183,39 @@ def main() -> int:
     if CONFIG['FORCE']: print('WARNING: --force flag set, existing files will be overwritten.')
     CONFIG['COOKIE_JAR'] = get_cookies()
 
-    links = get_download_links_for_user(args.username, args.include_hidden, CONFIG['SINCE'])
-    if CONFIG['VERBOSE']: print('Found [{}] links for [{}]\'s collection.'.format(len(links), args.username))
-    if not links:
-        if CONFIG['SINCE'] is None:
-            print('WARN: No album links found for user [{}]. Are you logged in and have you selected the correct browser to pull cookies from?'.format(args.username))
-        else:
-            print('WARN: No album links found for user [{}] since [{}]. Are you logged in and have you selected the correct browser to pull cookies from, and is the specified time old enough?'.format(args.username, args.download_since))
+    items = get_items_for_user(args.username, args.include_hidden)
+    if not items:
+        print('WARN: No album links found for user [{}]. Are you logged in and have you selected the correct browser to pull cookies from?'.format(args.username))
         sys.exit(2)
+    if CONFIG['VERBOSE']: print('Found [{}] downloadable items in [{}]\'s collection.'.format(len(items), args.username))
+
+    if CONFIG['SINCE']:
+        # Filter items by purchase time
+        items = {key: items[key] for key in items
+                 if purchase_time_ok(items[key], CONFIG['SINCE'])}
+        if not items:
+            print('No album links purchased since [{}].'.format(CONFIG['SINCE']))
+            sys.exit(0)
+
+        if CONFIG['VERBOSE']:
+            print('[{}] album links purchased since [{}].'.format(len(items), CONFIG['SINCE']))
 
     print('Starting album downloads...')
-    downloaded_zips = []
-    CONFIG['TQDM'] = tqdm(links, unit = 'album')
+    CONFIG['TQDM'] = tqdm(items, unit = 'album')
     if args.parallel_downloads > 1:
         with ThreadPoolExecutor(max_workers = args.parallel_downloads) as executor:
-            downloaded_zips = [file_path for file_path in list(executor.map(download_album, links)) if _is_zip(file_path)]
+            for item in items.values(): executor.submit(download_and_log_album, item)
     else:
-        for link in links:
-            file_path = download_album(link)
-            if _is_zip(file_path):
-                downloaded_zips.append(file_path)
+        for album in items.values():
+            download_and_log_album(album)
     CONFIG['TQDM'].close()
+
+    downloaded_zips = [item['file_path'] + '.zip' for item in items.values() if item['extension'] == '.zip' and item['downloaded']]
     print(downloaded_zips)
     if args.extract:
         for zip in downloaded_zips:
             print(f'Extracting compressed archive: {zip}')
+            if CONFIG['DRY_RUN']: continue
             album_name = re.search(r'\- (.+?)\.zip$', zip).group(1)
             extract_dir = os.path.join(os.path.dirname(zip), album_name)
             with zipfile.ZipFile(zip, 'r') as zip_file:
@@ -219,146 +226,262 @@ def main() -> int:
 
     return 0
 
-def filter_by_purchase_time(items : [dict], _since : datetime.datetime) -> [dict]:
-    good = []
-    for item in items:
-        purchaseTime = datetime.datetime.strptime(item['purchased'], '%d %b %Y %H:%M:%S GMT')
-        if purchaseTime >= _since:
-            good.append(item)
-    return good
-
-def fetch_items(_url : str, _user_id : str, _last_token : str, _count : int, _since : datetime.datetime) -> [str]:
+# Fetch item data for the given user via the bandcamp API, then return the
+# 'items' subobject, with 'redownload_url' and 'filename' fields added to each.
+def fetch_items(_hidden : bool, _user_id : str, _last_token : str, _count : int) -> dict:
+    url = COLLECTION_POST_URL if not _hidden else HIDDEN_POST_URL
+    if _count <= 0: return {}
     payload = {
         'fan_id' : _user_id,
         'count' : _count,
         'older_than_token' : _last_token,
     }
     with requests.post(
-        _url,
+        url,
         data = json.dumps(payload),
         cookies = CONFIG['COOKIE_JAR'],
     ) as response:
         response.raise_for_status()
         data = json.loads(response.text)
 
-        # There might be no data, for example calling `--include-hidden` with no hidden items
-        if 'redownload_urls' not in data:
-            return []
+        return merge_items_and_urls(data['items'], data['redownload_urls'] or {})
 
-        if _since is None:
-            return data['redownload_urls'].values()
-        items = []
-        for item in filter_by_purchase_time(data['items'], _since):
-            item_id = str(item['sale_item_id'])
-            item_type = item['sale_item_type']
-            items.append(data['redownload_urls'][item_type+item_id])
-        return items
-
-def get_download_links_for_user(_user : str, _include_hidden : bool, _since : datetime.datetime) -> [str]:
-    print('Retrieving album links from user [{}]\'s collection.'.format(_user))
-
+# Loads the given url and looks for the 'pagedata' div and, if found,
+# returns its 'data-blob' property decoded from json.
+def pagedata_for_url(_url : str) -> dict:
+    text = requests.get(_url, cookies = CONFIG['COOKIE_JAR']).text
     soup = BeautifulSoup(
-        requests.get(
-            USER_URL.format(_user),
-            cookies = CONFIG['COOKIE_JAR']
-        ).text,
+        text,
         'html.parser',
         parse_only = SoupStrainer('div', id='pagedata'),
     )
     div = soup.find('div')
-    if not div:
-        print('ERROR: No div with pagedata found for user at url [{}]'.format(USER_URL.format(_user)))
-        return
-    data = json.loads(html.unescape(div.get('data-blob')))
+    if not div: return {}
+    return json.loads(html.unescape(div.get('data-blob')))
+
+# Returns a dictionary mapping item key to item. In addition to the basic
+# bandcamp API item dict, returned items have their redownload url in
+# field 'redownload_url' and their download path (excluding extension) in
+# 'file_path'.
+def get_items_for_user(_user : str, _include_hidden : bool) -> dict:
+    # Get the initial metadata from the json in the 'data-blob' div on the
+    # user landing page.
+    user_url = USER_URL.format(_user)
+    data = pagedata_for_url(user_url)
+    if not data:
+        print('ERROR: No data found at user url [{}]'.format(user_url))
+        exit(2)
     if 'collection_count' not in data:
         print('ERROR: No collection info for user {}.\nPlease double check that your given username is correct.\nIt should be given exactly as it appears at the end of your bandcamp user url.\nFor example: bandcamp.com/user_name'.format(
             _user
         ))
         exit(2)
-
-    # The collection_data.redownload_urls includes links for both hidden and
-    # unhidden items. The unhidden items all appear before the hidden items in
-    # the raw json response, so in python 3.7+ we can probably expect that this
-    # ordering carries through to the keys of redownload_urls and just truncate
-    # the list... but this is a little uncomfortable to rely on, so let's divide
-    # them up by explicitly checking item_cache.
-    items = list(data['item_cache']['collection'].values())
-    if _include_hidden:
-        items.extend(data['item_cache']['hidden'].values())
-    if _since:
-        items = filter_by_purchase_time(items, _since)
-    item_keys = [str(item['sale_item_type']) + str(item['sale_item_id'])
-                 for item in items
-                 if 'sale_item_type' in item and 'sale_item_id' in item]
-    all_urls = data['collection_data']['redownload_urls']
-    download_urls = [all_urls[key] for key in item_keys if key in all_urls]
-
     user_id = data['fan_data']['fan_id']
 
-    download_urls.extend(fetch_items(
-        COLLECTION_POST_URL,
+    items = data['item_cache']['collection']
+    if _include_hidden:
+        items.update(data['item_cache']['hidden'])
+    # Attach download urls to the first page of items.
+    items = merge_items_and_urls(items.values(), data['collection_data']['redownload_urls'])
+    
+    # Fetch the rest of the visible library items.
+    items.update(fetch_items(
+        False,
         user_id,
         data['collection_data']['last_token'],
         # count is the number we have left to fetch after the initial data blob
-        data['collection_data']['item_count'] - len(data['item_cache']['collection']),
-        _since))
+        data['collection_data']['item_count'] - len(data['item_cache']['collection'])))
 
     if _include_hidden:
-        download_urls.extend(fetch_items(
-            HIDDEN_POST_URL,
+        # Fetch the rest of the hidden library items.
+        items.update(fetch_items(
+            True,
             user_id,
             data['hidden_data']['last_token'],
-            data['hidden_data']['item_count'] - len(data['item_cache']['hidden']),
-            _since))
+            data['hidden_data']['item_count'] - len(data['item_cache']['hidden'])))
 
-    return download_urls
+    # Calculate filenames and handle collisions
+    add_item_file_paths(items)
+    
+    return items
 
-def download_album(_album_url : str, _attempt : int = 1) -> str:
+# Returns true if the item's purchase time is no earlier than the given
+# cutoff, or if the item's purchase time can't be found.
+def purchase_time_ok(_item : dict, _since : datetime.datetime) -> bool:
+    # If there's no purchased field we have to say yes since we can't
+    # reliably exclude this item.
+    if 'purchased' not in _item: return True
+
+    # If there is a purchased field, compare it to the given cutoff.
+    purchaseTime = datetime.datetime.strptime(_item['purchased'], '%d %b %Y %H:%M:%S GMT')
+    return purchaseTime >= _since
+
+# Returns true if a valid item key can be assembled from the given item dict.
+def item_has_key(_item) -> bool:
+    return 'sale_item_type' in _item and 'sale_item_id' in _item
+
+# Returns the canonical key for an item (within the bandcamp API),
+# its type followed by its item id.
+def key_for_item(_item) -> str:
+    return str(_item['sale_item_type']) + str(_item['sale_item_id'])
+
+# Merges the 'redownload_urls' dict into the 'items' dict from the bandcamp
+# item list. The result is a dict keyed by key_for_item(item), where each
+# item has the added key 'redownload_url'.
+# Items with mismatched keys or no redownload url are dropped.
+def merge_items_and_urls(_items : list, _urls : dict) -> dict:
+    results = {}
+    for item in _items:
+        if not item_has_key(item) or key_for_item(item) not in _urls:
+            CONFIG['TQDM'].write("WARN: couldn't find redownload URL for item_id:[{}], artist:[{}], title:[{}]".format(
+                item['item_id'], item['band_name'], item['item_title']))
+            continue
+        key = key_for_item(item)
+        new_item = dict(item)
+        new_item['redownload_url'] = _urls[key]
+        results[key] = new_item
+    return results
+
+# Given a dictionary of bandcamp items, calculates their download path based
+# on the configured format, appends the item key if two names collide, and
+# stores the result in the item key 'file_path'.
+def add_item_file_paths(_items : dict):
+    filenames = {} # maps item key to the computed filename
+    filename_counts = {} # number of occurrences of each computed filename
+    # First calculate the user-formatted name for everything
+    for key,item in _items.items():
+        # For backwards compatibility, use 'artist' and 'title' (the equivalent
+        # keys from the album landing page data blob) instead of 'band_name'
+        # and 'item_title' when parsing the filename format.
+        track_info = {
+            'item_id': item['item_id'],
+            'artist': sanitize_value(item['band_name']),
+            'title': sanitize_value(item['item_title']),
+        }
+        filename = CONFIG['FILENAME_FORMAT'].format(**track_info)
+        filenames[key] = filename
+        filename_counts[filename] = filename_counts.get(filename, 0) + 1
+    
+    # Now rescan to apply final (deduped) paths.
+    for key,item in _items.items():
+        filename = filenames[key]
+        if filename_counts[filename] > 1:
+            # This filename is not unique, append the (globally unique) item
+            # key so their downloads don't overwrite each other.
+            filename = filename + '-' + key
+        item['file_path'] = os.path.join(CONFIG['OUTPUT_DIR'], filename)
+
+# Check if a file already exists at the given path that matches the given
+# metadata size string.
+# _download_size, if nonempty, should be of the form "[num]MB" or "[num]GB"
+def download_exists(_file_path : str, _download_size : str) -> bool:
+    if not os.path.exists(_file_path):
+        return False
+    if CONFIG['FORCE']:
+        if CONFIG['VERBOSE']: CONFIG['TQDM'].write('--force flag was given. Overwriting existing file at [{}].'.format(_file_path))
+        return False
+    if not _download_size:
+        # This is rare but can happen, a few downloads have no size
+        # metadata -- to be safe, don't report that we already have
+        # the file if we can't verify the size.
+        if CONFIG['VERBOSE'] >= 2: CONFIG['TQDM'].write('File at [{}] has no expected download size. Re-downloading.'.format(_file_path))
+        return False
+
+    actual_size = os.stat(_file_path).st_size
+    if _download_size.endswith("MB"):
+        actual_mb = actual_size / (1024 * 1024)
+        expected_mb = float(_download_size[:-2])
+        offset = abs(actual_mb - expected_mb)
+    elif _download_size.endswith("GB"):
+        # the field is called "size_mb" but it also uses GB
+        actual_gb = actual_size / (1024 * 1024 * 1024)
+        expected_gb = float(_download_size[:-2])
+        offset = abs(actual_gb - expected_gb)
+    else:
+        if CONFIG['VERBOSE'] >= 2: CONFIG['TQDM'].write('File at [{}] has unrecognized expected download size [{}]. Re-downloading.'.format(_file_path, _download_size))
+        return False
+    # We should expect a difference of <= 0.05 since bandcamp always gives
+    # sizes to one decimal place, but sometimes the reported value is slightly
+    # off. The main cause seems to be that archives are regenerated when
+    # needed and compression settings are not stable over time.
+    if offset < 0.15:
+        if CONFIG['VERBOSE'] >= 3: CONFIG['TQDM'].write('Skipping file that already exists: [{}]'.format(_file_path))
+        return True
+    if CONFIG['VERBOSE'] >= 2: CONFIG['TQDM'].write('File at [{}] is the wrong size. Expected [{}] but was [{}]. Re-downloading.'.format(_file_path, _download_size, actual_size))
+    return False
+
+# Get the pagedata json for a url, applying retry / wait settings.
+def pagedata_with_retry(_url : str) -> dict:
+    for attempt in range(CONFIG['MAX_URL_ATTEMPTS']):
+        # If this isn't the first attempt, apply the retry wait interval.
+        if attempt != 0: time.sleep(CONFIG['URL_RETRY_WAIT'])
+        try:
+            data = pagedata_for_url(_url)
+            if data: return data
+            if CONFIG['VERBOSE']: CONFIG['TQDM'].write('WARN: no pagedata found fetching album url [{}] (you may be rate-limited, try increasing --wait-after-download or --retry-wait)'.format(_url))
+        except IOError as e:
+            if CONFIG['VERBOSE'] >=2: CONFIG['TQDM'].write('WARN: I/O Error on attempt # [{}] to download the page data at [{}].'.format(attempt, _url))
+        except Exception as e:
+            print_exception(e, 'An exception occurred trying to download album url [{}]:'.format(_url))
+    CONFIG['TQDM'].write("ERROR: Couldn't download pagedata for album at url [{}]".format(_url))
+    return {}
+
+# Download the file for the given bandcamp album, and notify TQDM when done.
+def download_and_log_album(_album : dict):
     try:
-        soup = BeautifulSoup(
-            requests.get(
-                _album_url,
-                cookies = CONFIG['COOKIE_JAR']
-            ).text,
-            'html.parser',
-            parse_only = SoupStrainer('div', id='pagedata'),
-        )
-        div = soup.find('div')
-        if not div:
-            CONFIG['TQDM'].write('ERROR: No div with pagedata found for album at url [{}]'.format(_album_url))
-            return
-
-        data = json.loads(html.unescape(div.get('data-blob')))
-        album = data['download_items'][0]['title']
-
-        if not 'downloads' in data['download_items'][0]:
-            CONFIG['TQDM'].write('WARN: Album [{}] at url [{}] has no downloads available.'.format(album, _album_url))
-            return
-
-        if not CONFIG['FORMAT'] in data['download_items'][0]['downloads']:
-            CONFIG['TQDM'].write('WARN: Album [{}] at url [{}] does not have a download for format [{}].'.format(album, _album_url, CONFIG['FORMAT']))
-            return
-
-        download_url = data['download_items'][0]['downloads'][CONFIG['FORMAT']]['url']
-        track_info = {key: data['download_items'][0][key] for key in TRACK_INFO_KEYS}
-        return download_file(download_url, track_info)
-    except IOError as e:
-        if _attempt < CONFIG['MAX_URL_ATTEMPTS']:
-            if CONFIG['VERBOSE'] >=2: CONFIG['TQDM'].write('WARN: I/O Error on attempt # [{}] to download the album at [{}]. Trying again...'.format(_attempt, _album_url))
-            time.sleep(CONFIG['URL_RETRY_WAIT'])
-            download_album(_album_url, _attempt + 1)
-        else:
-            print_exception(e, 'An exception occurred trying to download album url [{}]:'.format(_album_url))
+        download_album(_album)
     except Exception as e:
-        print_exception(e, 'An exception occurred trying to download album url [{}]:'.format(_album_url))
-    finally:
-        # only tell TQDM we're done on the first call
-        if _attempt == 1:
-            CONFIG['TQDM'].update()
-            time.sleep(CONFIG['POST_DOWNLOAD_WAIT'])
+         band_name = _album.get('band_name', '')
+         title = _album.get('item_title', '')
+         print_exception(e, 'Trying to download album [{}] with artist [{}] and title [{}]:'.format(
+             key_for_item(_album), band_name, title))
+    CONFIG['TQDM'].update()
+    time.sleep(CONFIG['POST_DOWNLOAD_WAIT'])
 
-def download_file(_url : str, _track_info : dict = None, _attempt : int = 1) -> str:
-    """Return a string representing the absolute path to the file being downloaded"""
+# Download the file for the given bandcamp album. Sets the key 'extension'
+# to the file extension for this item, and the key 'downloaded' to whether
+# a file was successfully downloaded.
+def download_album(_album : dict):
+    _album['downloaded'] = False
+    if 'tralbum_type' in _album:
+        _album['extension'] = extension_from_type(_album['tralbum_type'], CONFIG['FORMAT'])
+    else:
+        # This key should never be missing, but if it is, we'll try to recover
+        # the extension later from the download itself.
+        _album['extension'] = ''
+    album_url = _album['redownload_url']
+    data = pagedata_with_retry(album_url)
+    if not data: return # pagedata_with_retry already logged failure
+    download_item = data['download_items'][0]
+    title = download_item['title']
+
+    if not 'downloads' in download_item:
+        CONFIG['TQDM'].write('WARN: Album [{}] at url [{}] has no downloads available.'.format(title, album_url))
+        return
+
+    if not CONFIG['FORMAT'] in download_item['downloads']:
+        CONFIG['TQDM'].write('WARN: Album [{}] at url [{}] does not have a download for format [{}].'.format(title, album_url, CONFIG['FORMAT']))
+        return
+
+    download = download_item['downloads'][CONFIG['FORMAT']] 
+    download_url = download['url']
+    download_size = download.get('size_mb', None)
+    # If this is an unknown format, get the extension from the download url.
+    if not _album['extension']: _album['extension'] = extension_from_url(download_url)
+
+    file_path = _album['file_path'] + _album['extension']
+    # Only start the download if a matching file doesn't already exist.
+    if not download_exists(file_path, download_size):
+        _album['downloaded'] = download_file(download_url, _album)
+
+def download_file(_url : str, _album : dict, _attempt : int = 1) -> bool:
+    """Download the given url to the given file path.
+    
+    Returns True if the url was successfully downloaded, False otherwise."""
+    if CONFIG['DRY_RUN']:
+        if CONFIG['VERBOSE'] >= 2:
+            CONFIG['TQDM'].write('Dry run: skipping file download for url [{}]'.format(_url))
+        return True
     try:
         with requests.get(
                 _url,
@@ -371,26 +494,21 @@ def download_file(_url : str, _track_info : dict = None, _attempt : int = 1) -> 
             filename_match = FILENAME_REGEX.search(response.headers['content-disposition'])
             original_filename = urllib.parse.unquote(filename_match.group(1)) if filename_match else _url.split('/')[-1]
             extension = os.path.splitext(original_filename)[1]
-            # Sanitize all input values for formatting
-            safe_track_info = {
-                key: (sanitize_filename(value) if type(value) == str else value) for key, value in _track_info.items()
-            } if _track_info else {}
-            filename = CONFIG['FILENAME_FORMAT'].format(**safe_track_info) + extension
-            file_path = os.path.join(CONFIG['OUTPUT_DIR'], filename)
-            if os.path.exists(file_path):
-                if CONFIG['FORCE']:
-                    if CONFIG['VERBOSE']: CONFIG['TQDM'].write('--force flag was given. Overwriting existing file at [{}].'.format(file_path))
-                else:
-                    actual_size = os.stat(file_path).st_size
-                    if expected_size == actual_size:
-                        if CONFIG['VERBOSE'] >= 3: CONFIG['TQDM'].write('Skipping album that already exists: [{}]'.format(file_path))
-                        return file_path
-                    else:
-                        if CONFIG['VERBOSE'] >= 2: CONFIG['TQDM'].write('Album at [{}] is the wrong size. Expected [{}] but was [{}]. Re-downloading.'.format(file_path, expected_size, actual_size))
+            if extension != '' and extension != _album['extension']:
+                if CONFIG['VERBOSE']: CONFIG['TQDM'].write('WARN: expected extension [{}] but download at [{}] gives [{}].'.format(
+                    _album['extension'], _url, extension))
+                _album['extension'] = extension
+            file_path = _album['file_path'] + _album['extension']
+            if os.path.exists(file_path) and not CONFIG['FORCE']:
+                # This should be quite rare since we already screened existing
+                # files against the album's size metadata, but check one last
+                # time if we already have a file of the right size.
+                actual_size = os.stat(file_path).st_size
+                if expected_size == actual_size:
+                    if CONFIG['VERBOSE'] >= 2: CONFIG['TQDM'].write('Canceling download that matches existing file: [{}]'.format(file_path))
+                    return False
 
             if CONFIG['VERBOSE'] >= 2: CONFIG['TQDM'].write('Album being saved to [{}]'.format(file_path))
-            if CONFIG['DRY_RUN']:
-                return file_path
             os.makedirs(os.path.dirname(file_path), exist_ok=True)
             with open(file_path, 'wb') as fh:
                 for chunk in response.iter_content(chunk_size=8192):
@@ -398,22 +516,22 @@ def download_file(_url : str, _track_info : dict = None, _attempt : int = 1) -> 
                 actual_size = fh.tell()
             if expected_size != actual_size:
                 raise IOError('Incomplete read. {} bytes read, {} bytes expected'.format(actual_size, expected_size))
+            return True
     except IOError as e:
         if _attempt < CONFIG['MAX_URL_ATTEMPTS']:
             if CONFIG['VERBOSE'] >=2: CONFIG['TQDM'].write('WARN: I/O Error on attempt # [{}] to download the file at [{}]. Trying again...'.format(_attempt, _url))
             time.sleep(CONFIG['URL_RETRY_WAIT'])
-            download_file(_url, _track_info, _attempt + 1)
+            return download_file(_url, _album, _attempt + 1)
         else:
             print_exception(e, 'An exception occurred trying to download file url [{}]:'.format(_url))
     except Exception as e:
         print_exception(e, 'An exception occurred trying to download file url [{}]:'.format(_url))
-    return file_path
+    return False
 
 def print_exception(_e : Exception, _msg : str = '') -> None:
     CONFIG['TQDM'].write('\nERROR: {}'.format(_msg))
     CONFIG['TQDM'].write('\n'.join(traceback.format_exception(etype=type(_e), value=_e , tb=_e.__traceback__)))
     CONFIG['TQDM'].write('\n')
-
 
 # Windows has some picky requirements about file names
 # So let's replace known bad characters with '-'
@@ -423,6 +541,23 @@ def sanitize_filename(_path : str) -> str:
     else:
         # Remove `/`
         return _path.replace('/', '-')
+    
+def sanitize_value(_value : any) -> any:
+    if type(_value) == str: return sanitize_filename(_value)
+    return _value
+
+def extension_from_url(_url : str) -> str:
+    path = urllib.parse.urlparse(_url).path
+
+    filename = path.split('/')[-1]
+    if '.' not in filename: return ''
+    return path[path.rindex('.'):]
+
+def extension_from_type(_download_type : str, _format : str) -> str:
+    if _download_type == "a": return ".zip"
+    if CONFIG['FORMAT'] in FORMAT_EXTENSIONS:
+        return FORMAT_EXTENSIONS[CONFIG['FORMAT']]
+    return ''
 
 def get_cookies():
     if CONFIG['COOKIES']:
