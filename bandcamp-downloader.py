@@ -22,9 +22,6 @@ from curl_cffi import requests
 import browser_cookie3
 from tqdm import tqdm
 
-import faulthandler
-faulthandler.enable()
-
 USER_URL = 'https://bandcamp.com/{}'
 COLLECTION_POST_URL = 'https://bandcamp.com/api/fancollection/1/collection_items'
 HIDDEN_POST_URL = 'https://bandcamp.com/api/fancollection/1/hidden_items'
