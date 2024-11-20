@@ -532,7 +532,7 @@ def download_file(_url : str, _album : dict, _attempt : int = 1) -> bool:
 
 def print_exception(_e : Exception, _msg : str = '') -> None:
     CONFIG['TQDM'].write('\nERROR: {}'.format(_msg))
-    CONFIG['TQDM'].write('\n'.join(traceback.format_exception(_e)))
+    CONFIG['TQDM'].write('\n'.join(traceback.format_exception(etype=type(_e), value=_e , tb=_e.__traceback__)))
     CONFIG['TQDM'].write('\n')
 
 # Windows has some picky requirements about file names
