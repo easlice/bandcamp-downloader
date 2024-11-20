@@ -9,7 +9,7 @@ long_description = (here / "README.md").read_text(encoding="utf-8")
 
 setup(
     name="bandcamp-downloader",  # Required
-    version="0.1.3",  # Required
+    version="0.2.0",  # Required
     description="Download your collection from Bandcamp.",  # Optional
     long_description=long_description,  # Optional
     long_description_content_type="text/markdown",  # Optional (see note above)
@@ -60,7 +60,7 @@ setup(
     #
     # For an analysis of "install_requires" vs pip's requirements files see:
     # https://packaging.python.org/discussions/install-requires-vs-requirements/
-    install_requires=["beautifulsoup4", "browser_cookie3", "requests", "tqdm"],  # Optional
+    install_requires=["beautifulsoup4", "browser_cookie3", "curl_cffi", "tqdm"],  # Optional
     # List additional URLs that are relevant to your project as a dict.
     #
     # This field corresponds to the "Project-URL" metadata fields:

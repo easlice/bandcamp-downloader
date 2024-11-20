@@ -18,7 +18,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 # These require pip installs
 from bs4 import BeautifulSoup, SoupStrainer
-import requests
+from curl_cffi import requests
 import browser_cookie3
 from tqdm import tqdm
 
@@ -236,15 +236,16 @@ def fetch_items(_hidden : bool, _user_id : str, _last_token : str, _count : int)
         'count' : _count,
         'older_than_token' : _last_token,
     }
-    with requests.post(
+    response = requests.post(
         url,
         data = json.dumps(payload),
         cookies = CONFIG['COOKIE_JAR'],
-    ) as response:
-        response.raise_for_status()
-        data = json.loads(response.text)
+        impersonate='chrome'
+    )
+    response.raise_for_status()
+    data = json.loads(response.text)
 
-        return merge_items_and_urls(data['items'], data['redownload_urls'] or {})
+    return merge_items_and_urls(data['items'], data['redownload_urls'] or {})
 
 # Loads the given url and looks for the 'pagedata' div and, if found,
 # returns its 'data-blob' property decoded from json.
@@ -283,7 +284,7 @@ def get_items_for_user(_user : str, _include_hidden : bool) -> dict:
         items.update(data['item_cache']['hidden'])
     # Attach download urls to the first page of items.
     items = merge_items_and_urls(items.values(), data['collection_data']['redownload_urls'])
-    
+
     # Fetch the rest of the visible library items.
     items.update(fetch_items(
         False,
@@ -302,7 +303,7 @@ def get_items_for_user(_user : str, _include_hidden : bool) -> dict:
 
     # Calculate filenames and handle collisions
     add_item_file_paths(items)
-    
+
     return items
 
 # Returns true if the item's purchase time is no earlier than the given
@@ -361,7 +362,7 @@ def add_item_file_paths(_items : dict):
         filename = CONFIG['FILENAME_FORMAT'].format(**track_info)
         filenames[key] = filename
         filename_counts[filename] = filename_counts.get(filename, 0) + 1
-    
+
     # Now rescan to apply final (deduped) paths.
     for key,item in _items.items():
         filename = filenames[key]
@@ -476,47 +477,48 @@ def download_album(_album : dict):
 
 def download_file(_url : str, _album : dict, _attempt : int = 1) -> bool:
     """Download the given url to the given file path.
-    
+
     Returns True if the url was successfully downloaded, False otherwise."""
     if CONFIG['DRY_RUN']:
         if CONFIG['VERBOSE'] >= 2:
             CONFIG['TQDM'].write('Dry run: skipping file download for url [{}]'.format(_url))
         return True
     try:
-        with requests.get(
+        response = requests.get(
                 _url,
                 cookies = CONFIG['COOKIE_JAR'],
+                impersonate='chrome',
                 stream = True,
-        ) as response:
-            response.raise_for_status()
+        )
+        response.raise_for_status()
 
-            expected_size = int(response.headers['content-length'])
-            filename_match = FILENAME_REGEX.search(response.headers['content-disposition'])
-            original_filename = urllib.parse.unquote(filename_match.group(1)) if filename_match else _url.split('/')[-1]
-            extension = os.path.splitext(original_filename)[1]
-            if extension != '' and extension != _album['extension']:
-                if CONFIG['VERBOSE']: CONFIG['TQDM'].write('WARN: expected extension [{}] but download at [{}] gives [{}].'.format(
-                    _album['extension'], _url, extension))
-                _album['extension'] = extension
-            file_path = _album['file_path'] + _album['extension']
-            if os.path.exists(file_path) and not CONFIG['FORCE']:
-                # This should be quite rare since we already screened existing
-                # files against the album's size metadata, but check one last
-                # time if we already have a file of the right size.
-                actual_size = os.stat(file_path).st_size
-                if expected_size == actual_size:
-                    if CONFIG['VERBOSE'] >= 2: CONFIG['TQDM'].write('Canceling download that matches existing file: [{}]'.format(file_path))
-                    return False
+        expected_size = int(response.headers['content-length'])
+        filename_match = FILENAME_REGEX.search(response.headers['content-disposition'])
+        original_filename = urllib.parse.unquote(filename_match.group(1)) if filename_match else _url.split('/')[-1]
+        extension = os.path.splitext(original_filename)[1]
+        if extension != '' and extension != _album['extension']:
+            if CONFIG['VERBOSE']: CONFIG['TQDM'].write('WARN: expected extension [{}] but download at [{}] gives [{}].'.format(
+                _album['extension'], _url, extension))
+            _album['extension'] = extension
+        file_path = _album['file_path'] + _album['extension']
+        if os.path.exists(file_path) and not CONFIG['FORCE']:
+            # This should be quite rare since we already screened existing
+            # files against the album's size metadata, but check one last
+            # time if we already have a file of the right size.
+            actual_size = os.stat(file_path).st_size
+            if expected_size == actual_size:
+                if CONFIG['VERBOSE'] >= 2: CONFIG['TQDM'].write('Canceling download that matches existing file: [{}]'.format(file_path))
+                return False
 
-            if CONFIG['VERBOSE'] >= 2: CONFIG['TQDM'].write('Album being saved to [{}]'.format(file_path))
-            os.makedirs(os.path.dirname(file_path), exist_ok=True)
-            with open(file_path, 'wb') as fh:
-                for chunk in response.iter_content(chunk_size=8192):
-                    fh.write(chunk)
-                actual_size = fh.tell()
-            if expected_size != actual_size:
-                raise IOError('Incomplete read. {} bytes read, {} bytes expected'.format(actual_size, expected_size))
-            return True
+        if CONFIG['VERBOSE'] >= 2: CONFIG['TQDM'].write('Album being saved to [{}]'.format(file_path))
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        with open(file_path, 'wb') as fh:
+            for chunk in response.iter_content(chunk_size=8192):
+                fh.write(chunk)
+            actual_size = fh.tell()
+        if expected_size != actual_size:
+            raise IOError('Incomplete read. {} bytes read, {} bytes expected'.format(actual_size, expected_size))
+        return True
     except IOError as e:
         if _attempt < CONFIG['MAX_URL_ATTEMPTS']:
             if CONFIG['VERBOSE'] >=2: CONFIG['TQDM'].write('WARN: I/O Error on attempt # [{}] to download the file at [{}]. Trying again...'.format(_attempt, _url))
@@ -541,7 +543,7 @@ def sanitize_filename(_path : str) -> str:
     else:
         # Remove `/`
         return _path.replace('/', '-')
-    
+
 def sanitize_value(_value : any) -> any:
     if type(_value) == str: return sanitize_filename(_value)
     return _value
@@ -582,7 +584,7 @@ def get_cookies():
 
 def _is_zip(file_path: str) -> bool:
     # Determine if the file is a compressed .zip archive
-    return file_path.endswith('.zip')
+    return file_path.endswith('.zip') if file_path else False
 
 
 if __name__ == '__main__':
