@@ -464,7 +464,7 @@ def download_album(_album : dict):
         CONFIG['TQDM'].write('WARN: Album [{}] at url [{}] does not have a download for format [{}].'.format(title, album_url, CONFIG['FORMAT']))
         return
 
-    download = download_item['downloads'][CONFIG['FORMAT']] 
+    download = download_item['downloads'][CONFIG['FORMAT']]
     download_url = download['url']
     download_size = download.get('size_mb', None)
     # If this is an unknown format, get the extension from the download url.
