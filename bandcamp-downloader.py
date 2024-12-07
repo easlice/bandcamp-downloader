@@ -464,7 +464,7 @@ def download_album(_album : dict):
         CONFIG['TQDM'].write('WARN: Album [{}] at url [{}] does not have a download for format [{}].'.format(title, album_url, CONFIG['FORMAT']))
         return
 
-    download = download_item['downloads'][CONFIG['FORMAT']] 
+    download = download_item['downloads'][CONFIG['FORMAT']]
     download_url = download['url']
     download_size = download.get('size_mb', None)
     # If this is an unknown format, get the extension from the download url.
@@ -513,7 +513,7 @@ def download_file(_url : str, _album : dict, _attempt : int = 1) -> bool:
         if CONFIG['VERBOSE'] >= 2: CONFIG['TQDM'].write('Album being saved to [{}]'.format(file_path))
         os.makedirs(os.path.dirname(file_path), exist_ok=True)
         with open(file_path, 'wb') as fh:
-            for chunk in response.iter_content(chunk_size=8192):
+            for chunk in response.iter_content():
                 fh.write(chunk)
             actual_size = fh.tell()
         if expected_size != actual_size:
