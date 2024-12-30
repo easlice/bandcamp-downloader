@@ -100,11 +100,6 @@ docker build -t bandcamp-downloader .
 docker run --rm -it -v ./downloads/:/downloads/ -v "$(pwd)"/cookies.txt:/app/cookies.txt bandcamp-downloader -c /app/cookies.txt -d /downloads/ [USERNAME]
 ```
 
-Docker Compose
-```
-docker compose run --rm bandcamp-downloader -d /downloads/ -f flac -c /app/cookies.txt [USERNAME]
-```
-
 ## Usage
 ```
 usage: bandcamp-downloader.py [-h]
