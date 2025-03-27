@@ -334,7 +334,7 @@ def merge_items_and_urls(_items : list, _urls : dict) -> dict:
     results = {}
     for item in _items:
         if not item_has_key(item) or key_for_item(item) not in _urls:
-            CONFIG['TQDM'].write("WARN: couldn't find redownload URL for item_id:[{}], artist:[{}], title:[{}]".format(
+            print("WARN: couldn't find redownload URL for item_id:[{}], artist:[{}], title:[{}]".format(
                 item['item_id'], item['band_name'], item['item_title']))
             continue
         key = key_for_item(item)
