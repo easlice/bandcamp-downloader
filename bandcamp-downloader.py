@@ -523,6 +523,9 @@ def download_file(_url : str, _album : dict, _attempt : int = 1) -> bool:
         if _attempt < CONFIG['MAX_URL_ATTEMPTS']:
             if CONFIG['VERBOSE'] >=2: CONFIG['TQDM'].write('WARN: I/O Error on attempt # [{}] to download the file at [{}]. Trying again...'.format(_attempt, _url))
             time.sleep(CONFIG['URL_RETRY_WAIT'])
+            # TODO: All exceptions get chained and reported at once.
+            #       Maybe collapse down similar exceptions?
+            #       Or at least give a better description of them?
             return download_file(_url, _album, _attempt + 1)
         else:
             print_exception(e, 'An exception occurred trying to download file url [{}]:'.format(_url))
@@ -532,7 +535,7 @@ def download_file(_url : str, _album : dict, _attempt : int = 1) -> bool:
 
 def print_exception(_e : Exception, _msg : str = '') -> None:
     CONFIG['TQDM'].write('\nERROR: {}'.format(_msg))
-    CONFIG['TQDM'].write('\n'.join(traceback.format_exception(etype=type(_e), value=_e , tb=_e.__traceback__)))
+    CONFIG['TQDM'].write('\n'.join(traceback.format_exception(_e, value=_e , tb=_e.__traceback__)))
     CONFIG['TQDM'].write('\n')
 
 # Windows has some picky requirements about file names
