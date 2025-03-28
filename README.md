@@ -97,8 +97,9 @@ usage: bandcamp-downloader.py [-h]
                               [--retry-wait RETRY_WAIT]
                               [--include-hidden]
                               [--download-since DOWNLOAD_SINCE]
-                              [--dry-run]
                               [--extract]
+                              [--summary]
+                              [--dry-run]
                               [--verbose] [-v]
                               username
 
@@ -153,11 +154,14 @@ optional arguments:
   --download-since DOWNLOAD_SINCE
                         Only download items purchased on or after the given date.
                         YYYY-MM-DD format, defaults to all items.
+  --extract, -x         Extracts downloaded albums, organised in {ARTIST}/{ALBUM} subdirectories.
+                        Songs are extracted to the path specified in the `--directory`/`-d` flag,
+                        otherwise to the current directory if not specified. Upon completion,
+                        original .zip file is deleted.
   --dry-run             Don't actually download files, just process all the web data
                         and report what would have been done.
-                        
-  --extract               Unzip all albums into a subfolder named after the album, under the artist folder.
-                        Deletes the zip file on completion of command.  
+  --summary             Display a summary of the status of every item at the end.
+                        Deletes the zip file on completion of command.
   --verbose, -v
 ```
 
