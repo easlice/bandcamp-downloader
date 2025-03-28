@@ -210,9 +210,10 @@ def main() -> int:
             download_and_log_album(album)
     CONFIG['TQDM'].close()
 
-    downloaded_zips = [item['file_path'] + '.zip' for item in items.values() if item['extension'] == '.zip' and item['downloaded']]
-    print(downloaded_zips)
     if args.extract:
+        downloaded_zips = [item['file_path'] + '.zip' for item in items.values() if item['extension'] == '.zip' and item['downloaded']]
+        if CONFIG['VERBOSE'] >=2:
+            print(downloaded_zips)
         for zip in downloaded_zips:
             print(f'Extracting compressed archive: {zip}')
             if CONFIG['DRY_RUN']: continue
