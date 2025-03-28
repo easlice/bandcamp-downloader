@@ -554,7 +554,15 @@ def download_file(_url : str, _album : dict, _attempt : int = 1) -> bool:
         _album['download_status'] = 'Downloaded'
         return True
     except IOError as e:
-        if _attempt < CONFIG['MAX_URL_ATTEMPTS']:
+        # HTTP 403 Seems to only show up if bandcamp won't let you download the album again.
+        # Their website says that it is a frequency problem and to try again later (so, rate-limiting)
+        # but personal experience shows that it always happens on the same songs and never goes away
+        # (unlike actual rate limiting responses, which are caught above getting the page data)
+        # Basically, this response means the download is never going to work.
+        if e.__class__.__name__ == "HTTPError" and e.response.status_code == 403:
+            CONFIG['TQDM'].write('WARN: HTTP 403 when trying to download the file at [{}] to location [{}].\nBandcamp may have removed this download and you may need to download it manually from the website.'.format(_url, _album['file_path'] + _album['extension']))
+            _album['download_status'] = 'Unavailable'
+        elif _attempt < CONFIG['MAX_URL_ATTEMPTS']:
             if CONFIG['VERBOSE'] >=2: CONFIG['TQDM'].write('WARN: I/O Error on attempt # [{}] to download the file at [{}] to location [{}]. Trying again...'.format(_attempt, _url, _album['file_path'] + _album['extension']))
             time.sleep(CONFIG['URL_RETRY_WAIT'])
             # TODO: All exceptions get chained and reported at once.
