@@ -83,7 +83,7 @@ def main() -> int:
     )
     parser.add_argument(
         '--directory', '-d',
-        default = os.getcwd(),
+        default = f"{os.getcwd()}/loaded/",
         help='The directory to download albums to. Defaults to the current directory.'
     )
     parser.add_argument(
