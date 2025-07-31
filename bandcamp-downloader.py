@@ -13,6 +13,7 @@ import time
 import urllib.parse
 import traceback
 import zipfile
+from typing import Union
 
 from concurrent.futures import ThreadPoolExecutor
 
@@ -341,7 +342,7 @@ def get_items_for_user(_user : str, _include_hidden : bool) -> dict:
 
 # Returns true if the item's purchase time is no earlier than the given
 # cutoff, or if the item's purchase time can't be found.
-def purchase_time_ok(_item : dict, _since : datetime.datetime | None, _until: datetime.datetime | None) -> bool:
+def purchase_time_ok(_item: dict, _since: Union[datetime.datetime, None], _until: Union[datetime.datetime, None]) -> bool:
     # If there's no purchased field we have to say yes since we can't
     # reliably exclude this item.
     if 'purchased' not in _item: return True
