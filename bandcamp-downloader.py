@@ -348,7 +348,6 @@ def purchase_time_ok(_item : dict, _since : datetime.datetime | None, _until: da
 
     # If there is a purchased field, compare it to the given cutoff vaalues.
     purchaseTime = datetime.datetime.strptime(_item['purchased'], '%d %b %Y %H:%M:%S GMT')
-    print(_since, purchaseTime, _until)
     if _since and purchaseTime < _since:
         return False
     if _until and purchaseTime >= _until:
