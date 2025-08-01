@@ -97,6 +97,7 @@ usage: bandcamp-downloader.py [-h]
                               [--retry-wait RETRY_WAIT]
                               [--include-hidden]
                               [--download-since DOWNLOAD_SINCE]
+                              [--download-until DOWNLOAD_UNTIL]
                               [--extract]
                               [--summary]
                               [--dry-run]
@@ -152,7 +153,10 @@ optional arguments:
                         '5'.
   --include-hidden      Download items in your collection that have been marked as hidden.
   --download-since DOWNLOAD_SINCE
-                        Only download items purchased on or after the given date.
+                        Only download items purchased on or after the given date (lower inclusive).
+                        YYYY-MM-DD format, defaults to all items.
+  --download-until DOWNLOAD_UNTIL
+                        Only download items purchased before (upper exclusive) the given date.
                         YYYY-MM-DD format, defaults to all items.
   --extract, -x         Extracts downloaded albums, organised in {ARTIST}/{ALBUM} subdirectories.
                         Songs are extracted to the path specified in the `--directory`/`-d` flag,
