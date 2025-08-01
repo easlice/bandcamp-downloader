@@ -13,6 +13,7 @@ import time
 import urllib.parse
 import traceback
 import zipfile
+from typing import Union
 
 from concurrent.futures import ThreadPoolExecutor
 
@@ -38,6 +39,7 @@ CONFIG = {
     'URL_RETRY_WAIT' : 5,
     'POST_DOWNLOAD_WAIT' : 1,
     'SINCE' : None,
+    'UNTIL' : None,
 }
 MAX_THREADS = 32
 DEFAULT_THREADS = 5
@@ -139,6 +141,11 @@ def main() -> int:
         help = 'Only download items purchased on or after the given date. YYYY-MM-DD format, defaults to all items.'
     )
     parser.add_argument(
+        '--download-until',
+        default = '',
+        help = 'Only download items purchased before the given date. YYYY-MM-DD format, defaults to all items.'
+    )
+    parser.add_argument(
         '--extract', '-x',
         action='store_true',
         help='Extracts downloaded albums, organised in {ARTIST}/{ALBUM} subdirectories. Songs are extracted to the '
@@ -170,6 +177,8 @@ def main() -> int:
     CONFIG['BROWSER'] = args.browser
     if args.download_since:
         CONFIG['SINCE'] = datetime.datetime.strptime(args.download_since, '%Y-%m-%d')
+    if args.download_until:
+        CONFIG['UNTIL'] = datetime.datetime.strptime(args.download_until, '%Y-%m-%d')
     CONFIG['FORMAT'] = args.format
     CONFIG['FORCE'] = args.force
     CONFIG['DRY_RUN'] = args.dry_run
@@ -191,21 +200,22 @@ def main() -> int:
     CONFIG['COOKIE_JAR'] = get_cookies()
 
     items = get_items_for_user(args.username, args.include_hidden)
+
     if not items:
         print('WARN: No album links found for user [{}]. Are you logged in and have you selected the correct browser to pull cookies from?'.format(args.username))
         sys.exit(2)
     if CONFIG['VERBOSE']: print('Found [{}] downloadable items in [{}]\'s collection.'.format(len(items), args.username))
 
-    if CONFIG['SINCE']:
+    if CONFIG['SINCE'] or CONFIG['UNTIL']:
         # Filter items by purchase time
         items = {key: items[key] for key in items
-                 if purchase_time_ok(items[key], CONFIG['SINCE'])}
+                 if purchase_time_ok(items[key], CONFIG['SINCE'], CONFIG['UNTIL'])}
         if not items:
-            print('No album links purchased since [{}].'.format(CONFIG['SINCE']))
+            print('No album links purchased since (including) - [{}] until [{}] (excluding).'.format(CONFIG['SINCE'], CONFIG['UNTIL']))
             sys.exit(0)
 
         if CONFIG['VERBOSE']:
-            print('[{}] album links purchased since [{}].'.format(len(items), CONFIG['SINCE']))
+            print('[{}] album links purchased since (including) [{}] until [{}] (excluding).'.format(len(items), CONFIG['SINCE'], CONFIG['UNTIL']))
 
     print('Starting album downloads...')
     CONFIG['TQDM'] = tqdm(items, unit = 'album')
@@ -333,14 +343,18 @@ def get_items_for_user(_user : str, _include_hidden : bool) -> dict:
 
 # Returns true if the item's purchase time is no earlier than the given
 # cutoff, or if the item's purchase time can't be found.
-def purchase_time_ok(_item : dict, _since : datetime.datetime) -> bool:
+def purchase_time_ok(_item: dict, _since: Union[datetime.datetime, None], _until: Union[datetime.datetime, None]) -> bool:
     # If there's no purchased field we have to say yes since we can't
     # reliably exclude this item.
     if 'purchased' not in _item: return True
 
-    # If there is a purchased field, compare it to the given cutoff.
+    # If there is a purchased field, compare it to the given cutoff vaalues.
     purchaseTime = datetime.datetime.strptime(_item['purchased'], '%d %b %Y %H:%M:%S GMT')
-    return purchaseTime >= _since
+    if _since and purchaseTime < _since:
+        return False
+    if _until and purchaseTime >= _until:
+        return False
+    return True
 
 # Returns true if a valid item key can be assembled from the given item dict.
 def item_has_key(_item) -> bool:
