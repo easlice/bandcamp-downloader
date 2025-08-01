@@ -39,6 +39,7 @@ CONFIG = {
     'URL_RETRY_WAIT' : 5,
     'POST_DOWNLOAD_WAIT' : 1,
     'SINCE' : None,
+    'UNTIL' : None,
 }
 MAX_THREADS = 32
 DEFAULT_THREADS = 5
