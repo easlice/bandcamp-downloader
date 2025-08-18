@@ -82,6 +82,24 @@ or directly through `poetry run`:
 poetry run python bandcamp-downloader.py [arguments]
 ```
 
+## Docker
+
+1. Build the docker image  
+```
+docker build -t bandcamp-downloader .
+```
+
+2. Create a `cookies.txt` file with your bandcamp cookies (must include header). Example:
+```
+# Netscape HTTP Cookie File
+.bandcamp.com	TRUE	/	FALSE	1735689600	identity	[VALUE OF IDENTITY COOKIE]
+```
+
+3. Run the docker image
+```
+docker run --rm -it -v ./downloads/:/downloads/ -v "$(pwd)"/cookies.txt:/app/cookies.txt bandcamp-downloader -c /app/cookies.txt -d /downloads/ [USERNAME]
+```
+
 ## Usage
 ```
 usage: bandcamp-downloader.py [-h]

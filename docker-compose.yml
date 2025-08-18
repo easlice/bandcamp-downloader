@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  bandcamp-downloader:
+    build: .
+    image: bandcamp-downloader:latest
+    volumes:
+      - ./downloads:/downloads
+      - ./cookies.txt:/app/cookies.txt
+    command: -c /app/cookies.txt -d /downloads/flac -f flac [BANDCAMP_USERNAME]
+
+  # Example if you wanted to have docker compose download two different formats
+  # bandcamp-mp3:
+  #   image: bandcamp-downloader:latest
+  #   network_mode: none
+  #   volumes:
+  #     - ./downloads:/downloads
+  #     - ./cookies.txt:/app/cookies.txt
+  #   command: -c /app/cookies.txt -d /downloads/mp3v0 -f mp3-v0 [BANDCAMP_USERNAME] 
